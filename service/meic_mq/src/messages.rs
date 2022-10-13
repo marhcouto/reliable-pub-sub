@@ -1,30 +1,20 @@
-#[derive(Debug)]
-pub enum SerializationError {
-    InvalidFormat,
-    UnexpectedMessage,
-    EmptyMessage
-}
-
-pub trait NetworkTradable<T> {
-    fn serialize(&self) -> Message;
-    fn deserialize(message: Message) -> Result<T, SerializationError>;
-}
+use bson::Bson;
 
 #[derive(Debug)]
 pub struct Message<'a> {
-    header: String,
+    header: Bson,
     payload: Option<&'a Vec<u8>>
 }
 
 impl Message<'_> {
-    pub fn new<'a>(header: String, payload: Option<&'a Vec<u8>> ) -> Message {
+    pub fn new<'a>(header: Bson, payload: Option<&'a Vec<u8>> ) -> Message {
         Message {
             header: header,
             payload: payload
         }
     }
     
-    pub fn header(&self) -> &str {
+    pub fn header(&self) -> &Bson {
         &self.header
     }
 
