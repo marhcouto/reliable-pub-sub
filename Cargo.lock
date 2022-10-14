@@ -175,6 +175,8 @@ version = "0.1.0"
 dependencies = [
  "bson",
  "meic_mq",
+ "serde",
+ "zmq",
 ]
 
 [[package]]
