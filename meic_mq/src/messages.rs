@@ -1,27 +1,31 @@
 use bson::Bson;
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug)]
-pub struct Message<'a> {
-    header: Bson,
-    payload: Option<&'a Vec<u8>>
+pub enum DeserializationErrors {
+    IncompatibleMessageType,
+    InvalidMessageStructure(String)
 }
 
-impl Message<'_> {
-    pub fn new<'a>(header: Bson, payload: Option<&'a Vec<u8>> ) -> Message {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Message {
+    req_type: String,
+    payload: Bson
+}
+
+impl Message {
+    fn new(req_type: String, payload: Bson) -> Message {
         Message {
-            header: header,
+            req_type: req_type,
             payload: payload
         }
     }
-    
-    pub fn header(&self) -> &Bson {
-        &self.header
-    }
-
-    pub fn payload(&self) -> Option<&Vec<u8>> {
-        self.payload
-    }
 }
 
+pub trait NetworkTradable<T> {
+    fn as_message(&self) -> Message;
+    fn from_message(message: Message) -> Result<T, DeserializationErrors>;
+} 
+
 pub mod put;
+pub mod get;
 pub mod subscribe;

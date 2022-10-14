@@ -1,9 +1,8 @@
+#![allow(unused_imports)]
 use meic_mq::messages;
+use meic_mq::messages::NetworkTradable;
 use bson;
 
 fn main() {
-    let payload = vec![12, 13, 14, 15];
-    let message = messages::put::Request::new("teste".to_string(), "teste".to_string(), "teste".to_string(), payload);
-    dbg!(bson::to_bson(&message).unwrap());
-
+    
 }
