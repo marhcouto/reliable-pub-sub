@@ -3,20 +3,20 @@ use serde::{Serialize, Deserialize};
 use super::{ ContextIOError, SUB_STORAGE_PATH };
 
 #[derive(Debug, Serialize, Deserialize)]
-struct SubscriberContext {
+pub struct SubscriberContext {
     #[serde(skip)]
-    sub_id: String,
-    topic: String,
-    known_broker_id: Option<String>,
-    next_message_id: u64
+    pub sub_id: String,
+    pub topic: String,
+    pub known_broker_id: String,
+    pub next_message_id: u64
 }
 
 impl SubscriberContext {
-    pub fn new(sub_id: String, topic: String) -> SubscriberContext {
+    pub fn new(sub_id: String, topic: String, broker_id: String) -> SubscriberContext {
         SubscriberContext {
             sub_id: sub_id,
             topic: topic,
-            known_broker_id: None,
+            known_broker_id: broker_id,
             next_message_id: 0
         }
     }

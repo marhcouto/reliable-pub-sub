@@ -4,11 +4,11 @@ use std::collections::{HashMap, HashSet};
 use super::{ PUB_STORAGE_PATH, FileWritable, ContextIOError };
 
 #[derive(Serialize, Deserialize)]
-struct PublisherContext {
+pub struct PublisherContext {
     #[serde(skip)]
     pub_id: String,
-    known_broker_id: Option<String>,
-    published_messages: HashMap<String, HashSet<u64>>
+    pub known_broker_id: Option<String>,
+    published_messages: HashMap<String, HashSet<String>>
 }
 
 impl PublisherContext {
@@ -18,6 +18,18 @@ impl PublisherContext {
             known_broker_id: None,
             published_messages: HashMap::new() 
         }
+    }
+
+    pub fn is_message_new(&self, topic: &String, message_id: &String) -> bool {
+        match self.published_messages.get(topic) {
+            None => true,
+            Some(set) => !set.contains(message_id)
+        }
+    }
+
+    pub fn reset_context(&mut self) {
+        self.known_broker_id = None;
+        self.published_messages = HashMap::new()
     }
 
     pub fn read(pub_id: String) -> Result<PublisherContext, ContextIOError> {

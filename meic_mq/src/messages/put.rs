@@ -1,15 +1,18 @@
+use crate::context::publisher::PublisherContext;
+
 use super::{NetworkTradable, Message, DeserializationErrors};
 use serde::{Serialize, Deserialize};
 
-const REQUEST_HEADER: &str = "PUT";
-const REPLY_HEADER: &str = "PUT_REPL";
+pub const REQUEST_HEADER: &str = "PUT";
+pub const REPLY_HEADER: &str = "PUT_REPL";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Request {
-    pub_id: String,
-    topic: String,
-    message_id: String,
-    payload: Vec<u8>
+    pub pub_id: String,
+    pub topic: String,
+    pub message_id: String,
+    #[serde(with = "serde_bytes")]
+    pub payload: Vec<u8>
 }
 
 impl Request {
@@ -41,16 +44,29 @@ impl NetworkTradable<Request> for Request {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Reply {
-    message_id: String,
-    topic: String
+    pub message_id: String,
+    pub topic: String,
+    pub broker_id: String
 }
 
 impl Reply {
-    pub fn new(message_id: String, topic: String) -> Reply {
+    pub fn new(message_id: String, topic: String, broker_id: String) -> Reply {
         Reply {
             message_id: message_id,
-            topic: topic
+            topic: topic,
+            broker_id: broker_id
         }
+    }
+
+    pub fn match_request(&self, request: &Request) -> bool {
+        if self.topic != request.topic {
+            return false;
+        }
+        if self.message_id != request.message_id {
+            return false;
+        }
+
+        return true;
     }
 }
 

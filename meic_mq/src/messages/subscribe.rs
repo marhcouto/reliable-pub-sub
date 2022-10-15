@@ -1,21 +1,19 @@
 use super::{NetworkTradable, Message, DeserializationErrors};
 use serde::{Serialize, Deserialize};
 
-const REQUEST_HEADER: &str = "SUB";
-const REPLY_HEADER: &str = "SUB_REPL";
+pub const REQUEST_HEADER: &str = "SUB";
+pub const REPLY_HEADER: &str = "SUB_REPL";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Request {
-    sub_id: String,
-    endpoint: String,
-    topic: String
+    pub sub_id: String,
+    pub topic: String
 }
 
 impl Request {
-    pub fn new(sub_id: String, endpoint: String, topic: String) -> Request {
+    pub fn new(sub_id: String, topic: String) -> Request {
         Request {
             sub_id: sub_id,
-            endpoint: endpoint,
             topic: topic
         }
     }
@@ -39,16 +37,29 @@ impl NetworkTradable<Request> for Request {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Reply {
-    sub_id: String,
-    topic: String
+    pub sub_id: String,
+    pub topic: String,
+    pub broker_id: String
 }
 
 impl Reply {
-    pub fn new(sub_id: String, topic: String) -> Reply {
+    pub fn new(sub_id: String, topic: String, broker_id: String) -> Reply {
         Reply {
             sub_id: sub_id,
-            topic: topic
+            topic: topic,
+            broker_id: broker_id
         }
+    }
+
+    pub fn match_request(&self, request: &Request) -> bool {
+        if self.topic != request.topic {
+            return false;
+        }
+        if self.sub_id != request.sub_id {
+            return false;
+        }
+
+        return true;
     }
 }
 

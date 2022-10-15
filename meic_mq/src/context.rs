@@ -5,7 +5,7 @@ use serde::{ Serialize, de::DeserializeOwned };
 const PUB_STORAGE_PATH: &str = "./data/pub/";
 const SUB_STORAGE_PATH: &str = "./data/sub/";
 
-enum ContextIOError {
+pub enum ContextIOError {
     ErrorCreatingDirectory(String),
     ErrorWritingToFile(String),
     ErrorCantFindFile(String),
