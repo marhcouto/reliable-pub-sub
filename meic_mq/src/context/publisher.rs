@@ -14,7 +14,7 @@ pub struct PublisherContext {
 impl PublisherContext {
     pub fn new(pub_id: String) -> PublisherContext {
         PublisherContext {
-            pub_id: pub_id,
+            pub_id,
             known_broker_id: None,
             published_messages: HashMap::new() 
         }

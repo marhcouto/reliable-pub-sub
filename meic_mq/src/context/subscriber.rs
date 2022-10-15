@@ -7,16 +7,16 @@ pub struct SubscriberContext {
     #[serde(skip)]
     pub sub_id: String,
     pub topic: String,
-    pub known_broker_id: String,
+    pub known_broker_id: Option<String>,
     pub next_message_id: u64
 }
 
 impl SubscriberContext {
     pub fn new(sub_id: String, topic: String, broker_id: String) -> SubscriberContext {
         SubscriberContext {
-            sub_id: sub_id,
-            topic: topic,
-            known_broker_id: broker_id,
+            sub_id,
+            topic,
+            known_broker_id: Some(broker_id),
             next_message_id: 0
         }
     }

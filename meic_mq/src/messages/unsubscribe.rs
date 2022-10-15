@@ -1,25 +1,18 @@
 use super::{NetworkTradeable, Message, DeserializationErrors};
 use serde::{Serialize, Deserialize};
 
-pub const REQUEST_HEADER: &str = "PUT";
-pub const REPLY_HEADER: &str = "PUT_REPL";
+pub const REQUEST_HEADER: &str = "UNSUB";
+pub const REPLY_HEADER: &str = "UNSUB_REPL";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Request {
-    pub pub_id: String,
-    pub topic: String,
-    pub message_id: String,
-    #[serde(with = "serde_bytes")]
-    pub payload: Vec<u8>
+    pub sub_id: String
 }
 
 impl Request {
-    pub fn new(pub_id: String, topic: String, message_id: String, payload: Vec<u8>) -> Request {
+    pub fn new(sub_id: String) -> Request {
         Request {
-            pub_id: pub_id,
-            topic: topic,
-            message_id: message_id,
-            payload: payload
+            sub_id
         }
     }
 }
@@ -42,29 +35,20 @@ impl NetworkTradeable<Request> for Request {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Reply {
-    pub message_id: String,
-    pub topic: String,
+    pub sub_id: String,
     pub broker_id: String
 }
 
 impl Reply {
-    pub fn new(message_id: String, topic: String, broker_id: String) -> Reply {
+    pub fn new(sub_id: String, broker_id: String) -> Reply {
         Reply {
-            message_id: message_id,
-            topic: topic,
+            sub_id: sub_id,
             broker_id: broker_id
         }
     }
 
     pub fn match_request(&self, request: &Request) -> bool {
-        if self.topic != request.topic {
-            return false;
-        }
-        if self.message_id != request.message_id {
-            return false;
-        }
-
-        return true;
+        self.sub_id == request.sub_id 
     }
 }
 

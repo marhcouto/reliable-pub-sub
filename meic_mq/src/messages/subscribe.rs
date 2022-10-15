@@ -1,4 +1,4 @@
-use super::{NetworkTradable, Message, DeserializationErrors};
+use super::{NetworkTradeable, Message, DeserializationErrors};
 use serde::{Serialize, Deserialize};
 
 pub const REQUEST_HEADER: &str = "SUB";
@@ -19,7 +19,7 @@ impl Request {
     }
 }
 
-impl NetworkTradable<Request> for Request {
+impl NetworkTradeable<Request> for Request {
     fn as_message(&self) -> Message {
         Message::new(REQUEST_HEADER.to_string(), bson::to_bson(self).unwrap())
     }
@@ -63,7 +63,7 @@ impl Reply {
     }
 }
 
-impl NetworkTradable<Reply> for Reply {
+impl NetworkTradeable<Reply> for Reply {
     fn as_message(&self) -> Message {
         Message::new(REPLY_HEADER.to_string(), bson::to_bson(self).unwrap())
     }

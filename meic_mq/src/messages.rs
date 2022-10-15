@@ -25,7 +25,7 @@ impl Message {
     }
 }
 
-pub trait NetworkTradable<T> {
+pub trait NetworkTradeable<T> {
     fn as_message(&self) -> Message;
     fn from_message(message: Message) -> Result<T, DeserializationErrors>;
 } 
@@ -34,3 +34,4 @@ pub mod put;
 pub mod get;
 pub mod subscribe;
 pub mod error;
+pub mod unsubscribe;
