@@ -32,8 +32,13 @@ pub fn get(socket: &zmq::Socket, sub_ctx: &mut SubscriberContext, request: get::
         }
     }
 
+    // Probably Useless
     if !repl.match_request(&request) {
         return Err("Unexpected reply for get request".to_string());
+    }
+
+    if sub_ctx.next_message_id != repl.message_no {
+        return get(socket, sub_ctx, request);
     }
 
     let ack: get::Ack = get::Ack {
