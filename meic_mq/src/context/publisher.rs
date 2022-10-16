@@ -16,7 +16,7 @@ impl PublisherContext {
         PublisherContext {
             pub_id,
             known_broker_id: None,
-            published_messages: HashMap::new() 
+            published_messages: HashMap::new()
         }
     }
 
