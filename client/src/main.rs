@@ -4,6 +4,7 @@ use serde::{Serialize, Deserialize};
 
 mod subscriber;
 mod publisher;
+mod broker;
 mod parsing;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -27,6 +28,7 @@ fn main() {
     match service.as_str() {
         "subscriber" => subscriber::subscriber(&args),
         "publisher" => publisher::publisher(&args),
+        "broker" => broker::broker(&args),
         _ => panic!("Unknown service string {}", service)
     }
 }

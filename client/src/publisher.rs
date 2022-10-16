@@ -9,6 +9,6 @@ use serde::{Serialize, Deserialize};
 
 pub fn publisher(args: &Vec<String>) {
 
-    // TODO: parse subscriber arguments
+    // TODO: parse publisher arguments
 
 }
