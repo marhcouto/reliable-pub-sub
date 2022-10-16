@@ -8,8 +8,8 @@ pub enum DeserializationErrors {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Message {
-    req_type: String,
-    payload: Bson
+    pub req_type: String,
+    pub payload: Bson
 }
 
 impl Message {
@@ -19,9 +19,13 @@ impl Message {
             payload: payload
         }
     }
+
+    pub fn to_bytes(&self) -> Result<Vec<u8>, bson::ser::Error> {
+        bson::to_vec(self)
+    }
 }
 
-pub trait NetworkTradable<T> {
+pub trait NetworkTradeable<T> {
     fn as_message(&self) -> Message;
     fn from_message(message: Message) -> Result<T, DeserializationErrors>;
 } 
@@ -29,3 +33,5 @@ pub trait NetworkTradable<T> {
 pub mod put;
 pub mod get;
 pub mod subscribe;
+pub mod error;
+pub mod unsubscribe;
