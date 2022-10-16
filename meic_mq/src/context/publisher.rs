@@ -6,9 +6,9 @@ use super::{ PUB_STORAGE_PATH, FileWritable, ContextIOError };
 #[derive(Serialize, Deserialize)]
 pub struct PublisherContext {
     #[serde(skip)]
-    pub_id: String,
+    pub pub_id: String,
     pub known_broker_id: Option<String>,
-    published_messages: HashMap<String, HashSet<String>>
+    pub published_messages: HashMap<String, HashSet<String>>
 }
 
 impl PublisherContext {

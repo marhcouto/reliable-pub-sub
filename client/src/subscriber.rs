@@ -1,23 +1,20 @@
 #![allow(unused_imports)]
-use meic_mq::context::{ subscriber::SubscriberContext, publisher::PublisherContext };
+use meic_mq::messages::subscribe::{ Request, Reply };
+use meic_mq::{ get, subscribe, unsubscribe };
 
 use bson;
 use serde::{Serialize, Deserialize};
 
 
-pub fn subscriber(args: &Vec<String>) {
-
-    // TODO: parse subscriber arguments
+pub fn subscriber1(args: &Vec<String>) {
 
 
+    let mut request: Request = Request::new(String::from("SubD"), String::from("Guns"));
+    let context = zmq::Context::new();
+    let socket = context.socket(zmq::REQ).unwrap();
+    assert!(socket.connect("tcp://localhost:5555").is_ok());
 
-    let mut subscriber: SubscriberContext = SubscriberContext {
-        sub_id: String::from("ID"),
-        topic: String::from("bla"),
-        known_broker_id: None,
-        next_message_id: 0
-    };
-
+    subscribe(&socket, &request);
 
 
 }
