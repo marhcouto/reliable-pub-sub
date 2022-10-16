@@ -1,14 +1,14 @@
 #![allow(unused_imports)]
-use meic_mq::messages;
-use meic_mq::messages::NetworkTradeable;
+use meic_mq::context::{ subscriber::SubscriberContext, publisher::PublisherContext };
 
 use bson;
 use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
 
 
 
-pub fn publisher(args: &Vec<String>) {
+pub fn publisher1(args: &Vec<String>) {
 
-    // TODO: parse publisher arguments
+    let mut publisher: PublisherContext = PublisherContext::new(String::from("PubG"));
 
 }
