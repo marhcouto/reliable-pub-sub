@@ -1,6 +1,6 @@
 # SDLE First Assignment
 
-SDLE First Assignment of group T&lt;m&gt;&lt;n&gt;G&lt;p&gt;&lt;q&gt;.
+SDLE First Assignment of group T&lt;0&gt;&lt;6&gt;G&lt;1&gt;&lt;4&gt;.
 
 Group members:
 
