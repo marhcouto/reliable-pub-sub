@@ -159,7 +159,3 @@ pub fn unsubscribe(socket: &zmq::Socket, request: &unsubscribe::Request) -> Resu
 
     Ok(())
 }
-
-pub fn broker() {
-    // TODO: broker 'main' function
-}
