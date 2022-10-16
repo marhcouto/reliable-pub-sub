@@ -16,7 +16,7 @@ struct Person {
 
 fn main() {
 
-//    let usage_message: String = String::from("USAGE:\ncargo run <service>\nservice: name of the service to run. Can be one of subscriber, publisher or broker.");
+//    let usage_message: String = String::from("USAGE:\ncargo run <service>\nservice: name of the service to run. Can be one of subscriber or publisher.");
 //    let args: Vec<String> = env::args().collect();
 //
 //    if args.len() < 2 {
@@ -25,8 +25,9 @@ fn main() {
 //    }
 
 
+    println!("CLIENT!");
 
-    
+
 
     /*let person = Person {
         name: "Francisco Oliveira".to_string(),

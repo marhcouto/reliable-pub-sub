@@ -8,5 +8,5 @@ edition = "2021"
 [dependencies]
 bson = "2.3.0"
 zmq = "0.9.2"
-meic_mq = { path="./meic_mq" }
+meic_mq = { path="../meic_mq" }
 serde = "1.0.145"
