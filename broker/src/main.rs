@@ -11,7 +11,7 @@ use scheduled_thread_pool;
 use lazy_static::lazy_static;
 
 lazy_static!{
-    static ref TOPICS: Mutex<HashMap<String, HashSet<String>>> = Mutex::new(HashMap::new());
+    static ref SUBS: Mutex<HashMap<String, HashSet<String>>> = Mutex::new(HashMap::new());
     static ref REQUESTS: Mutex<HashMap<String, HashSet<String>>> = Mutex::new(HashMap::new());
     static ref QUEUE: Mutex<HashMap<String, VecDeque<String>>> = Mutex::new(HashMap::new());
 }
@@ -35,7 +35,7 @@ fn main() {
 
     st_pool.execute_at_fixed_rate(time::Duration::from_secs(5), time::Duration::from_secs(5), || {
         let topics_file: File = File::create("topics.json").unwrap();
-        serde_json::to_writer(&topics_file, &*TOPICS).unwrap();
+        serde_json::to_writer(&topics_file, &*SUBS).unwrap();
 
         let requests_file: File = File::create("requests.json").unwrap();
         serde_json::to_writer(&requests_file, &*REQUESTS).unwrap();
@@ -50,6 +50,39 @@ fn main() {
         parse_request(&socket, &req_id, req);
     }
     
+}
+
+fn add_pend_req(topic: String, request_id: String) {
+    let mut req = REQUESTS.lock().unwrap();
+
+    if req.contains_key(&topic) {
+        req.get_mut(&topic).unwrap().insert(request_id);
+    }
+    else{
+        let mut s : HashSet<String> = HashSet::new();
+        s.insert(request_id);
+        req.insert(topic,s);
+    }
+}
+
+fn check_pend_req(topic: String, socket: &zmq::Socket) {
+    let mut topics = SUBS.lock().unwrap();
+    let mut req = REQUESTS.lock().unwrap();
+    let mut queue = QUEUE.lock().unwrap();
+
+    if req.contains_key(&topic) {
+        let pend_req = req.get_mut(&topic).unwrap();
+
+        for id in pend_req.iter() {
+            let v = queue.get_mut(id).unwrap().pop_front().unwrap();
+
+            if send_msg(&socket, &id, format!("OK {}", v).as_str()) == -1 {
+                queue.get_mut(id).unwrap().push_front(v);
+            }
+        }
+
+        //req.remove(&topic);
+    }
 }
 
 
@@ -100,7 +133,7 @@ fn send_msg(socket: &zmq::Socket, message_id: &String, message_bytes: &str) -> i
 
 
 fn parse_request(socket: &zmq::Socket, request_id: &String, request: String) {
-    let mut topic_list = TOPICS.lock().unwrap();
+    let mut topic_list = SUBS.lock().unwrap();
     let mut queue = QUEUE.lock().unwrap();
 
     let split: Vec<_> = request.splitn(2," ").collect();
@@ -120,16 +153,16 @@ fn parse_request(socket: &zmq::Socket, request_id: &String, request: String) {
     match request_type {
         "SUB" => {
             if topic_list.contains_key(topic){
-                let tmap = topic_list.get_mut(topic).unwrap(); 
+                let _tmap = topic_list.get_mut(topic).unwrap(); 
                 
-                if !tmap.contains(request_id){
-                    tmap.insert(String::from(request_id));
+                if !_tmap.contains(request_id){
+                    _tmap.insert(String::from(request_id));
                     queue.insert(request_id.to_string(),VecDeque::new());
                 }
             else{
-                let mut tmap: HashSet<String> = HashSet::new();
-                tmap.insert(String::from(request_id));
-                topic_list.insert(topic.to_string(), tmap);
+                let mut _tmap: HashSet<String> = HashSet::new();
+                _tmap.insert(String::from(request_id));
+                topic_list.insert(topic.to_string(), _tmap);
                 queue.insert(request_id.to_string(),VecDeque::new());
             }
             send_msg(&socket, &request_id, "OK");
@@ -137,13 +170,13 @@ fn parse_request(socket: &zmq::Socket, request_id: &String, request: String) {
         },
         "UNSUB" => {
             if topic_list.contains_key(topic){
-                let tmap = topic_list.get_mut(topic).unwrap();
+                let _tmap = topic_list.get_mut(topic).unwrap();
                 
-                if tmap.contains(request_id){
-                    tmap.remove(&String::from(request_id));
+                if _tmap.contains(request_id){
+                    _tmap.remove(&String::from(request_id));
                     queue.remove(request_id);
 
-                    if tmap.len() == 0 {
+                    if _tmap.len() == 0 {
                         topic_list.remove(topic);
                     }
                 }
@@ -155,9 +188,9 @@ fn parse_request(socket: &zmq::Socket, request_id: &String, request: String) {
         },
         "GET" => {
             if topic_list.contains_key(topic){
-                let tmap = topic_list.get_mut(topic).unwrap();
+                let _tmap = topic_list.get_mut(topic).unwrap();
 
-                if tmap.contains(request_id){
+                if _tmap.contains(request_id){
                     let first = queue.get_mut(request_id).unwrap().pop_front();
                     if first == None {
                         add_pend_req(String::from(topic),String::from(request_id));
@@ -199,39 +232,5 @@ fn parse_request(socket: &zmq::Socket, request_id: &String, request: String) {
         _ => {
             send_msg(&socket, &request_id, "NOK");
         },
-    }
-}
-
-fn add_pend_req(topic: String, request_id: String) {
-    let mut req = REQUESTS.lock().unwrap();
-
-    if req.contains_key(&topic) {
-        req.get_mut(&topic).unwrap().insert(request_id);
-    }
-    else{
-        let mut s : HashSet<String> = HashSet::new();
-        s.insert(request_id);
-        req.insert(topic,s);
-    }
-}
-
-fn check_pend_req(topic: String, socket: &zmq::Socket) {
-    let mut topics = TOPICS.lock().unwrap();
-    let mut req = REQUESTS.lock().unwrap();
-    let mut queue = QUEUE.lock().unwrap();
-
-    if req.contains_key(&topic) {
-        let pend_req = req.get_mut(&topic).unwrap();
-        let tmap = topics.get_mut(&topic).unwrap();
-
-        for id in pend_req.iter() {
-            let v = queue.get_mut(id).unwrap().pop_front().unwrap();
-
-            if send_msg(&socket, &id, format!("OK {}", v).as_str()) == -1 {
-                queue.get_mut(id).unwrap().push_front(v);
-            }
-        }
-
-        req.remove(&topic);
     }
 }
