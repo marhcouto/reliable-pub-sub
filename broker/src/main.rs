@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::sync::Mutex;
+use std::str;
 use std::env;
 use std::time;
 use std::fs::File;
@@ -54,25 +55,27 @@ fn main() {
 
 fn rcv_msg(socket: &zmq::Socket) -> (String, String){
     let res = socket.recv_multipart(0);
+    let message_id;
+    let message_bytes;
 
     match res {
         Ok(payload) => {
-            let message_id = match String::from_utf8(&payload[0]) {
-                Ok(string_msg) => string_msg,
-                Err(_) => "".to_string()
+            match str::from_utf8(&payload[0]) { // String::from utf not useful, so str version instead
+                Ok(string_msg) => message_id = String::from(string_msg),
+                Err(conv_err) => {
+                    println!("Message id convesion from utf8 to string error ({0})", conv_err);
+                    message_id = "".to_string(); // when err, set empty string
+                }
             };
 
-            if (message_id == "") { println!("Message id convesion from utf8 to string error"); };
-
-            // payload[1] is empty string divisor
-
-            let message_bytes = match String::from_utf8(&payload[2]) {
-                Ok(string_msg) => string_msg,
-                Err(_) => "".to_string()
+            match str::from_utf8(&payload[1]) {
+                Ok(string_msg) => message_bytes = String::from(string_msg),
+                Err(conv_err) => {
+                    println!("Message bytes convesion from utf8 to string error ({0})", conv_err);
+                    message_bytes = "".to_string();
+                }
             };
-
-            if (message_bytes == "") { println!("Message bytes convesion from utf8 to string error"); };
-
+            
             return (message_id, message_bytes);
         },
         Err(err) => {
@@ -83,12 +86,10 @@ fn rcv_msg(socket: &zmq::Socket) -> (String, String){
 }
 
 fn send_msg(socket: &zmq::Socket, message_id: &String, message_bytes: &str) -> i32{
-    let res = socket.send_multipart([message_id.as_bytes(), "".as_bytes(), message_bytes.as_bytes()], 0);
+    let res = socket.send_multipart([message_id.as_bytes(), message_bytes.as_bytes()], 0);
 
     match res {
-        Ok(_) => {
-            return 0;
-        },
+        Ok(_) => return 0,
         Err(err) => {
             println!("Error sending message ({0})", err);
             return 1;
