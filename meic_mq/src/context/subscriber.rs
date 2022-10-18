@@ -33,6 +33,6 @@ impl SubscriberContext {
     }
 
     pub fn create_get_request(&self) -> get::Request {
-        get::Request::new(self.sub_id)
+        get::Request::new(self.sub_id.clone(), self.topic.clone())
     }
 }

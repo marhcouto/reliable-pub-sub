@@ -6,7 +6,6 @@ use meic_mq::put;
 use bson;
 use serde::{ Serialize, Deserialize };
 use std::collections::HashMap;
-use std::clone;
 
 
 pub fn publisher1() {

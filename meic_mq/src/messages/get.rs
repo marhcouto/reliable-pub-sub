@@ -9,6 +9,7 @@ pub const ACK_REPLY_HEADER: &str = "GET_ACK_REPL";
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Request {
     pub sub_id: String,
+    pub topic: String
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,9 +33,10 @@ pub struct AckReply {
 }
 
 impl Request {
-    pub fn new(sub_id: String) -> Request {
+    pub fn new(sub_id: String, topic: String) -> Request {
         Request {
             sub_id,
+            topic
         }
     }
 }
