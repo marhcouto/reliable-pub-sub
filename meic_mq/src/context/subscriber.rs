@@ -1,6 +1,7 @@
 use serde::{Serialize, Deserialize};
 
 use super::{ ContextIOError, SUB_STORAGE_PATH };
+use super::super::messages::get;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SubscriberContext {
@@ -29,5 +30,9 @@ impl SubscriberContext {
         };
         sub_ctx.sub_id = sub_id;
         Ok(sub_ctx)
+    }
+
+    pub fn create_get_request(&self) -> get::Request {
+        get::Request::new(self.sub_id)
     }
 }

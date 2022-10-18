@@ -1,7 +1,10 @@
 use serde::{Serialize, Deserialize};
 use std::collections::{HashMap, HashSet};
+use std::clone;
 
 use super::{ PUB_STORAGE_PATH, FileWritable, ContextIOError };
+
+use super::super::messages::put;
 
 #[derive(Serialize, Deserialize)]
 pub struct PublisherContext {
@@ -40,6 +43,10 @@ impl PublisherContext {
         };
         pub_ctx.pub_id = pub_id;
         Ok(pub_ctx)
+    }
+
+    pub fn create_put_request(&self, topic: String, message_id: String, payload: Vec<u8>) -> put::Request {
+        put::Request::new(self.pub_id.clone(), topic, message_id, payload)
     }
 }
 
