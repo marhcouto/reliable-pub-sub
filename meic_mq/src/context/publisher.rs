@@ -1,9 +1,11 @@
 use serde::{Serialize, Deserialize};
 use std::collections::{HashMap, HashSet};
 
-use super::{ PUB_STORAGE_PATH, FileWritable, ContextIOError };
+use super::{ FileWritable, ContextIOError, read };
 
 use super::super::messages::put;
+
+const PUB_STORAGE_PATH: &str = "./data/pub/";
 
 #[derive(Serialize, Deserialize)]
 pub struct PublisherContext {
@@ -15,10 +17,14 @@ pub struct PublisherContext {
 
 impl PublisherContext {
     pub fn new(pub_id: String) -> PublisherContext {
-        PublisherContext {
-            pub_id,
-            known_broker_id: None,
-            published_messages: HashMap::new()
+        let publisher_path = format!("{}{}", PUB_STORAGE_PATH, pub_id);
+        match super::read(publisher_path) {
+            Ok(data) => data,
+            Err(_) => PublisherContext {
+                pub_id,
+                known_broker_id: None,
+                published_messages: HashMap::new()
+            }
         }
     }
 
@@ -49,8 +55,28 @@ impl PublisherContext {
     }
 }
 
-impl FileWritable for PublisherContext {
+impl FileWritable<PublisherContext> for PublisherContext {
     fn build_path(&self) -> String {
         return format!("{}{}", PUB_STORAGE_PATH, self.pub_id);
+    }
+
+    fn from_file(id: &String) -> Result<PublisherContext, ContextIOError> {
+        read(format!("{}{}", Self::build_prefix(), id))
+    }
+
+    fn build_prefix() -> &'static str {
+        return PUB_STORAGE_PATH;
+    }
+}
+
+impl Drop for PublisherContext {
+    fn drop(&mut self) {
+        if let Err(err) = super::save(self) {
+            match err {
+                ContextIOError::ErrorCreatingDirectory(err) => eprintln!("Couldn't create directory to save {} publisher's context: {}", self.pub_id, err),
+                ContextIOError::ErrorWritingToFile(err) => eprintln!("Couldn't write to {} publisher's context: {}", self.pub_id, err),
+                _ => eprintln!("Unexpected error while writing {} publisher's state", self.pub_id)
+            }
+        }
     }
 }
