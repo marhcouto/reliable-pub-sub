@@ -26,7 +26,7 @@ pub fn subscriber1() {
         Err(val) => panic!("Subscribe failed with error {}", val)
     }
 
-    let get_request: GetRequest = GetRequest::new(sub_ctx.sub_id.clone());
+    let get_request: GetRequest = sub_ctx.create_get_request();
     match get(&socket, &mut sub_ctx, get_request) {
         Ok(payload) => println!("Payload: {:?}", payload),
         Err(val) => panic!("Get request failed with error {}", val)
