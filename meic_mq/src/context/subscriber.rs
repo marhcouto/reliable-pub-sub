@@ -1,7 +1,7 @@
 use serde::{Serialize, Deserialize};
 
 use super::{ ContextIOError, FileWritable, read };
-use super::super::messages::get;
+use super::super::messages::{ get, unsubscribe, subscribe };
 
 const SUB_STORAGE_PATH: &str = "./data/sub/";
 
@@ -15,11 +15,11 @@ pub struct SubscriberContext {
 }
 
 impl SubscriberContext {
-    pub fn new(sub_id: String, topic: String, broker_id: String) -> SubscriberContext {
+    pub fn new(sub_id: String, topic: String) -> SubscriberContext {
         SubscriberContext {
             sub_id,
             topic,
-            known_broker_id: Some(broker_id),
+            known_broker_id: None,
             next_message_id: 0
         }
     }
@@ -37,6 +37,7 @@ impl SubscriberContext {
     pub fn create_get_request(&self) -> get::Request {
         get::Request::new(self.sub_id.clone(), self.topic.clone())
     }
+<<<<<<< HEAD
 }
 
 impl FileWritable<SubscriberContext> for SubscriberContext {
@@ -64,3 +65,14 @@ impl Drop for SubscriberContext {
         }
     }
 }
+=======
+
+    pub fn create_subscribe_request(&self) -> subscribe::Request {
+        subscribe::Request::new(self.sub_id.clone(), self.topic.clone())
+    }
+
+    pub fn create_unsubscribe_request(&self) -> unsubscribe::Request {
+        unsubscribe::Request::new(self.sub_id.clone())
+    }
+}
+>>>>>>> refactor/lib-function-wrappers

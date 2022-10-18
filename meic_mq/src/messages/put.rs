@@ -1,5 +1,6 @@
 use super::{NetworkTradeable, Message, DeserializationErrors};
 use serde::{Serialize, Deserialize};
+use uuid::Uuid;
 
 pub const REQUEST_HEADER: &str = "PUT";
 pub const REPLY_HEADER: &str = "PUT_REPL";
@@ -14,11 +15,12 @@ pub struct Request {
 }
 
 impl Request {
-    pub fn new(pub_id: String, topic: String, message_id: String, payload: Vec<u8>) -> Request {
+    pub fn new(pub_id: String, topic: String, payload: Vec<u8>) -> Request {
+        let uuid: Uuid = Uuid::new_v4();
         Request {
             pub_id: pub_id,
             topic: topic,
-            message_id: message_id,
+            message_id: uuid.to_string(),
             payload: payload
         }
     }
