@@ -1,7 +1,9 @@
 use serde::{Serialize, Deserialize};
 
-use super::{ ContextIOError, SUB_STORAGE_PATH };
+use super::{ ContextIOError, FileWritable, read };
 use super::super::messages::get;
+
+const SUB_STORAGE_PATH: &str = "./data/sub/";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SubscriberContext {
@@ -34,5 +36,31 @@ impl SubscriberContext {
 
     pub fn create_get_request(&self) -> get::Request {
         get::Request::new(self.sub_id.clone(), self.topic.clone())
+    }
+}
+
+impl FileWritable<SubscriberContext> for SubscriberContext {
+    fn build_path(&self) -> String {
+        return format!("{}{}", SUB_STORAGE_PATH, self.sub_id);
+    }
+
+    fn from_file(id: &String) -> Result<SubscriberContext, ContextIOError> {
+        read(format!("{}{}", Self::build_prefix(), id))
+    }
+
+    fn build_prefix() -> &'static str {
+        return SUB_STORAGE_PATH;
+    }
+}
+
+impl Drop for SubscriberContext {
+    fn drop(&mut self) {
+        if let Err(err) = super::save(self) {
+            match err {
+                ContextIOError::ErrorCreatingDirectory(err) => eprintln!("Couldn't create directory to save {} subscriber's context: {}", self.sub_id, err),
+                ContextIOError::ErrorWritingToFile(err) => eprintln!("Couldn't write to {} subscriber's context: {}", self.sub_id, err),
+                _ => eprintln!("Unexpected error while writing {} subscriber's state", self.sub_id)
+            }
+        }
     }
 }
