@@ -13,7 +13,7 @@ lazy_static! {
 }
 
 pub fn get(sub_ctx: &mut SubscriberContext, request: &get::Request) -> Result<Vec<u8>, String> {
-    let socket = SOCKET.lock().unwrap().deref();
+    let socket: &zmq::Socket = &SOCKET.lock().unwrap();
     assert!(socket.connect("tcp://localhost:5555").is_ok());
 
     _get(&socket, sub_ctx, request)
@@ -78,14 +78,14 @@ fn _get(socket: &zmq::Socket, sub_ctx: &mut SubscriberContext, request: &get::Re
 }
 
 pub fn put(pub_ctx: &mut PublisherContext, request: &put::Request) -> Result<(), String> {
-    let socket = SOCKET.lock().unwrap().deref();
+    let socket: &zmq::Socket = &SOCKET.lock().unwrap();
     assert!(socket.connect("tcp://localhost:5555").is_ok());
 
     _put(&socket, pub_ctx, request)
 }
 
 fn _put(socket: &zmq::Socket, pub_ctx: &mut PublisherContext, request: &put::Request) -> Result<(), String> {
-    if pub_ctx.is_message_new(&request.topic, &request.message_id) {
+    if pub_ctx.is_message_new(&request.topic, &request.message_uuid) {
         println!("Publisher claims that the message was already sent");
     }
     socket.send(request.as_message().to_bytes().unwrap(), 0).unwrap();
@@ -119,7 +119,7 @@ fn _put(socket: &zmq::Socket, pub_ctx: &mut PublisherContext, request: &put::Req
 }
 
 pub fn subscribe(sub_ctx: &mut SubscriberContext, request: &subscribe::Request) -> Result<(), String> {
-    let socket = SOCKET.lock().unwrap().deref();
+    let socket: &zmq::Socket = &SOCKET.lock().unwrap();
     assert!(socket.connect("tcp://localhost:5555").is_ok());
 
     _subscribe(&socket, sub_ctx, request)
@@ -151,7 +151,7 @@ fn _subscribe(socket: &zmq::Socket, sub_ctx: &mut SubscriberContext, request: &s
 }
 
 pub fn unsubscribe(sub_ctx: &mut SubscriberContext, request: &unsubscribe::Request) -> Result<(), String> {
-    let socket = SOCKET.lock().unwrap().deref();
+    let socket: &zmq::Socket = &SOCKET.lock().unwrap();
     assert!(socket.connect("tcp://localhost:5555").is_ok());
 
     _unsubscribe(&socket, sub_ctx, request)
