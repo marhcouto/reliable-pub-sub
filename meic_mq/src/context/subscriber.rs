@@ -37,7 +37,14 @@ impl SubscriberContext {
     pub fn create_get_request(&self) -> get::Request {
         get::Request::new(self.sub_id.clone(), self.topic.clone())
     }
-<<<<<<< HEAD
+
+    pub fn create_subscribe_request(&self) -> subscribe::Request {
+        subscribe::Request::new(self.sub_id.clone(), self.topic.clone())
+    }
+
+    pub fn create_unsubscribe_request(&self) -> unsubscribe::Request {
+        unsubscribe::Request::new(self.sub_id.clone())
+    }
 }
 
 impl FileWritable<SubscriberContext> for SubscriberContext {
@@ -65,14 +72,5 @@ impl Drop for SubscriberContext {
         }
     }
 }
-=======
 
-    pub fn create_subscribe_request(&self) -> subscribe::Request {
-        subscribe::Request::new(self.sub_id.clone(), self.topic.clone())
-    }
 
-    pub fn create_unsubscribe_request(&self) -> unsubscribe::Request {
-        unsubscribe::Request::new(self.sub_id.clone())
-    }
-}
->>>>>>> refactor/lib-function-wrappers

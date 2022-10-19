@@ -1,11 +1,7 @@
-use super::{ PUB_STORAGE_PATH, FileWritable, ContextIOError };
-use super::super::messages::put;
-
 use serde::{Serialize, Deserialize};
 use std::collections::{HashMap, HashSet};
 
 use super::{ FileWritable, ContextIOError, read };
-
 use super::super::messages::put;
 
 const PUB_STORAGE_PATH: &str = "./data/pub/";
