@@ -11,8 +11,8 @@ use scheduled_thread_pool;
 use lazy_static::lazy_static;
 
 lazy_static!{
-    static ref SUBS: Mutex<HashMap<String, HashSet<String>>> = Mutex::new(HashMap::new());
-    static ref REQUESTS: Mutex<HashMap<String, HashSet<String>>> = Mutex::new(HashMap::new());
+    static ref SUBS: Mutex<HashMap<String, HashMap<String, u64>>> = Mutex::new(HashMap::new());
+    static ref TOPICS: Mutex<HashMap<String, HashSet<String>>> = Mutex::new(HashMap::new());
     static ref QUEUE: Mutex<HashMap<String, VecDeque<String>>> = Mutex::new(HashMap::new());
 }
 
@@ -25,20 +25,18 @@ fn main() {
         .bind("tcp://*:5555") //qual é a porta?
         .expect("failed binding socket");
 
-    let arguments: Vec<String> = env::args().collect();
+    let _arguments: Vec<String> = env::args().collect();
 
-    if !(arguments.len() == 2 && (arguments[1] == "-r" || arguments[1] == "--reset-status")) {
-        //TODO : recover state
-    }
+    recover_state();
 
     let st_pool = scheduled_thread_pool::ScheduledThreadPool::new(1);
 
     st_pool.execute_at_fixed_rate(time::Duration::from_secs(5), time::Duration::from_secs(5), || {
-        let topics_file: File = File::create("topics.json").unwrap();
-        serde_json::to_writer(&topics_file, &*SUBS).unwrap();
+        let subs_file: File = File::create("subs.json").unwrap();
+        serde_json::to_writer(&subs_file, &*SUBS).unwrap();
 
-        let requests_file: File = File::create("requests.json").unwrap();
-        serde_json::to_writer(&requests_file, &*REQUESTS).unwrap();
+        let topics_file: File = File::create("topics.json").unwrap();
+        serde_json::to_writer(&topics_file, &*TOPICS).unwrap();
 
         let queue_file: File = File::create("queue.json").unwrap();
         serde_json::to_writer(&queue_file, &*QUEUE).unwrap();
@@ -52,36 +50,31 @@ fn main() {
     
 }
 
-fn add_pend_req(topic: String, request_id: String) {
-    let mut req = REQUESTS.lock().unwrap();
 
-    if req.contains_key(&topic) {
-        req.get_mut(&topic).unwrap().insert(request_id);
+fn recover_state(){
+
+    let file = File::open("topics.json");
+
+    if file.is_ok() {
+        *TOPICS.lock().unwrap() = serde_json::from_reader(file.unwrap()).unwrap();
+    } else {
+        println!("Topics state not found! Creating a new one...")
     }
-    else{
-        let mut s : HashSet<String> = HashSet::new();
-        s.insert(request_id);
-        req.insert(topic,s);
+
+    let file = File::open("queue.json");
+
+    if file.is_ok() {
+        *QUEUE.lock().unwrap() = serde_json::from_reader(file.unwrap()).unwrap();
+    } else {
+        println!("Queue state not found! Creating a new one...")
     }
-}
 
-fn check_pend_req(topic: String, socket: &zmq::Socket) {
-    let mut topics = SUBS.lock().unwrap();
-    let mut req = REQUESTS.lock().unwrap();
-    let mut queue = QUEUE.lock().unwrap();
+    let file = File::open("subs.json");
 
-    if req.contains_key(&topic) {
-        let pend_req = req.get_mut(&topic).unwrap();
-
-        for id in pend_req.iter() {
-            let v = queue.get_mut(id).unwrap().pop_front().unwrap();
-
-            if send_msg(&socket, &id, format!("OK {}", v).as_str()) == -1 {
-                queue.get_mut(id).unwrap().push_front(v);
-            }
-        }
-
-        //req.remove(&topic);
+    if file.is_ok() {
+        *SUBS.lock().unwrap() = serde_json::from_reader(file.unwrap()).unwrap();
+    } else {
+        println!("Subsvcribers state not found! Creating a new one...")
     }
 }
 
@@ -132,8 +125,9 @@ fn send_msg(socket: &zmq::Socket, message_id: &String, message_bytes: &str) -> i
 
 
 
-fn parse_request(socket: &zmq::Socket, request_id: &String, request: String) {
-    let mut topic_list = SUBS.lock().unwrap();
+fn parse_request(socket: &zmq::Socket, client_id: &String, request: String) {
+    let mut subs_list = SUBS.lock().unwrap();
+    let mut topics_list = TOPICS.lock().unwrap();
     let mut queue = QUEUE.lock().unwrap();
 
     let split: Vec<_> = request.splitn(2," ").collect();
@@ -152,85 +146,76 @@ fn parse_request(socket: &zmq::Socket, request_id: &String, request: String) {
 
     match request_type {
         "SUB" => {
-            if topic_list.contains_key(topic){
-                let _tmap = topic_list.get_mut(topic).unwrap(); 
-                
-                if !_tmap.contains(request_id){
-                    _tmap.insert(String::from(request_id));
-                    queue.insert(request_id.to_string(),VecDeque::new());
+            if subs_list.contains_key(client_id){
+                send_msg(&socket, &client_id, "AS"); //already subs- see erros structs
                 }
             else{
-                let mut _tmap: HashSet<String> = HashSet::new();
-                _tmap.insert(String::from(request_id));
-                topic_list.insert(topic.to_string(), _tmap);
-                queue.insert(request_id.to_string(),VecDeque::new());
+                if topics_list.contains_key(topic) {
+                    let mut set = topics_list.get_mut(topic).unwrap();
+                    set.insert(String::from(client_id));
+                }
+                subs_list.insert(String::from(client_id), String::from(topic));
+                queue.insert(client_id.to_string(),VecDeque::new());
             }
-            send_msg(&socket, &request_id, "OK");
-            }
+            send_msg(&socket, &client_id, "OK");
         },
         "UNSUB" => {
-            if topic_list.contains_key(topic){
-                let _tmap = topic_list.get_mut(topic).unwrap();
-                
-                if _tmap.contains(request_id){
-                    _tmap.remove(&String::from(request_id));
-                    queue.remove(request_id);
+            if subs_list.contains_key(client_id){
+                subs_list.remove(client_id);
+                queue.remove(client_id);
 
-                    if _tmap.len() == 0 {
-                        topic_list.remove(topic);
-                    }
-                }
+                send_msg(&socket, &client_id, "OK");
 
+                let set = topics_list.get_mut(topic).unwrap();
+                set.remove(client_id);
 
-            send_msg(&socket, &request_id, "OK");
-
+            }
+            else {
+                send_msg(&socket, &client_id, "NOK");
             }
         },
         "GET" => {
-            if topic_list.contains_key(topic){
-                let _tmap = topic_list.get_mut(topic).unwrap();
+            if subs_list.contains_key(client_id){
+                let tp = subs_list.get_mut(client_id).unwrap();
 
-                if _tmap.contains(request_id){
-                    let first = queue.get_mut(request_id).unwrap().pop_front();
+                if topic == tp{
+                    let first = queue.get_mut(client_id).unwrap().pop_front();
                     if first == None {
-                        add_pend_req(String::from(topic),String::from(request_id));
+                        send_msg(&socket, &client_id, "SRY");
                     }
                     else{
                         let v = first.unwrap();
-                        if send_msg(&socket, &request_id, format!("OK {}", v).as_str()) == -1 {
-                            queue.get_mut(request_id).unwrap().push_front(v);
+                        if send_msg(&socket, &client_id, format!("OK {}", v).as_str()) == -1 {
+                            queue.get_mut(client_id).unwrap().push_front(v);
                         }
                     }
                     
                 }
                 else{
-                    send_msg(&socket, &request_id, "NS");
+                    send_msg(&socket, &client_id, "NS");
                 }
 
             }
             else {
-                send_msg(&socket, &request_id, "NF");
+                send_msg(&socket, &client_id, "NF");
             }
 
         },
         "PUT" => {
-            if topic_list.contains_key(topic) {
-                let set = topic_list.get_mut(topic).unwrap();
+            if topics_list.contains_key(topic) {
+                let set = topics_list.get_mut(topic).unwrap();
                 let msg = &split[1][end +1..];
 
                 for id in set.iter() {
                     let value = queue.get_mut(id).unwrap();
                     value.push_back(String::from(msg.trim()))
                 }
-
-                drop(topic_list);
-
-                check_pend_req(String::from(topic), socket);
             }
 
         },
         _ => {
-            send_msg(&socket, &request_id, "NOK");
+            send_msg(&socket, &client_id, "NOK");
         },
     }
+
 }
