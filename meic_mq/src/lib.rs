@@ -13,7 +13,7 @@ lazy_static! {
 }
 
 pub fn get(sub_ctx: &mut SubscriberContext, request: &get::Request) -> Result<Vec<u8>, String> {
-    let socket = SOCKET.lock().unwrap();
+    let socket = SOCKET.lock().unwrap().deref();
     assert!(socket.connect("tcp://localhost:5555").is_ok());
 
     _get(&socket, sub_ctx, request)
@@ -78,7 +78,7 @@ fn _get(socket: &zmq::Socket, sub_ctx: &mut SubscriberContext, request: &get::Re
 }
 
 pub fn put(pub_ctx: &mut PublisherContext, request: &put::Request) -> Result<(), String> {
-    let socket = SOCKET.lock().unwrap();
+    let socket = SOCKET.lock().unwrap().deref();
     assert!(socket.connect("tcp://localhost:5555").is_ok());
 
     _put(&socket, pub_ctx, request)
@@ -119,7 +119,7 @@ fn _put(socket: &zmq::Socket, pub_ctx: &mut PublisherContext, request: &put::Req
 }
 
 pub fn subscribe(sub_ctx: &mut SubscriberContext, request: &subscribe::Request) -> Result<(), String> {
-    let socket = SOCKET.lock().unwrap();
+    let socket = SOCKET.lock().unwrap().deref();
     assert!(socket.connect("tcp://localhost:5555").is_ok());
 
     _subscribe(&socket, sub_ctx, request)
@@ -151,7 +151,7 @@ fn _subscribe(socket: &zmq::Socket, sub_ctx: &mut SubscriberContext, request: &s
 }
 
 pub fn unsubscribe(sub_ctx: &mut SubscriberContext, request: &unsubscribe::Request) -> Result<(), String> {
-    let socket = SOCKET.lock().unwrap();
+    let socket = SOCKET.lock().unwrap().deref();
     assert!(socket.connect("tcp://localhost:5555").is_ok());
 
     _unsubscribe(&socket, sub_ctx, request)

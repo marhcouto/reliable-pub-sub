@@ -17,6 +17,7 @@ pub struct Reply {
     pub sub_id: String,
     pub message_no: u64,
     pub broker_id: String,
+    #[serde(with = "serde_bytes")]
     pub payload: Vec<u8>,
 }
 
