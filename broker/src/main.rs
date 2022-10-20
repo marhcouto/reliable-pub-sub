@@ -1,236 +1,265 @@
+use meic_mq::messages::get::{ REQUEST_HEADER as GET_REQ_HEAD, ACK_HEADER as GET_ACK_HEAD, Request as GetRequest, Reply as GetReply, Ack as AckRequest, AckReply };
+use meic_mq::messages::put::{ REQUEST_HEADER as PUT_REQ_HEAD, Request as PutRequest, Reply as PutReply };
+use meic_mq::messages::subscribe::{ REQUEST_HEADER as SUB_REQ_HEAD, Request as SubRequest, Reply as SubReply };
+use meic_mq::messages::unsubscribe::{ REQUEST_HEADER as UNSUB_REQ_HEAD, Request as UnsubRequest, Reply as UnsubReply };
+use meic_mq::messages::error::{ BrokerErrorMessage, BrokerErrorType };
+use meic_mq::messages::{Message, NetworkTradeable};
+
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::collections::VecDeque;
+use std::io::Write;
 use std::sync::Mutex;
 use std::str;
 use std::env;
 use std::time;
 use std::fs::File;
-use serde_json;
 use scheduled_thread_pool;
+use serde::{ Serialize, Deserialize };
 use lazy_static::lazy_static;
+use lazy_static::__Deref;
+
+const SUBS_FILE_PATH: &str = "subs.bson";
+const TOPICS_FILE_PATH: &str = "topics.bson";
+
+#[derive(Debug, Serialize, Deserialize)]
+enum SubscriberStatus {
+    WaitingAck,
+    WaitingGet
+}
+
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SubscriberData {
+    topic: String,
+    status: SubscriberStatus,
+    last_read_post: u64
+}
+
+impl SubscriberData {
+    fn new(topic: String, last_read_post: u64) -> SubscriberData {
+        SubscriberData {
+            topic,
+            status: SubscriberStatus::WaitingGet,
+            last_read_post
+        }
+    }
+
+    fn increment_last_read(&mut self) -> u64 {
+        self.last_read_post += 1;
+        self.last_read_post
+    }
+
+    fn change_status(&mut self) {
+        match self.status {
+            SubscriberStatus::WaitingAck => self.status = SubscriberStatus::WaitingGet,
+            SubscriberStatus::WaitingGet => self.status = SubscriberStatus::WaitingAck
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct TopicData {
+    posts: HashMap<String, Vec<u8>>,
+    post_counter: u64
+}
+
+impl TopicData {
+    fn new() -> TopicData {
+        TopicData { posts: HashMap::new(), post_counter: 0 }
+    }
+
+    fn increment_counter(&mut self) -> u64 {
+        self.post_counter += 1;
+        self.post_counter
+    }
+}
 
 lazy_static!{
-    static ref SUBS: Mutex<HashMap<String, HashSet<String>>> = Mutex::new(HashMap::new());
-    static ref REQUESTS: Mutex<HashMap<String, HashSet<String>>> = Mutex::new(HashMap::new());
-    static ref QUEUE: Mutex<HashMap<String, VecDeque<String>>> = Mutex::new(HashMap::new());
+    static ref SUBS: Mutex<HashMap<String, SubscriberData>> = Mutex::new(HashMap::new());
+    static ref TOPICS: Mutex<HashMap<String, TopicData>> = Mutex::new(HashMap::new());
+    static ref RECEIVED_UUIDS: Mutex<HashSet<String>> = Mutex::new(HashSet::new());
+    static ref BROKER_UUID: Mutex<String> = Mutex::new(String::new());
 }
 
 fn main() {
     let context = zmq::Context::new();
-    let socket = context.socket(zmq::ROUTER).unwrap();
-    socket.set_router_mandatory(true).unwrap(); 
+    let socket = context.socket(zmq::REP).unwrap();
 
     socket
-        .bind("tcp://*:5555") //qual é a porta?
+        .bind("tcp://*:5555") //qual e a porta?
         .expect("failed binding socket");
 
-    let arguments: Vec<String> = env::args().collect();
+    let _arguments: Vec<String> = env::args().collect();
 
-    if !(arguments.len() == 2 && (arguments[1] == "-r" || arguments[1] == "--reset-status")) {
-        //TODO : recover state
-    }
+    recover_state();
 
     let st_pool = scheduled_thread_pool::ScheduledThreadPool::new(1);
 
     st_pool.execute_at_fixed_rate(time::Duration::from_secs(5), time::Duration::from_secs(5), || {
-        let topics_file: File = File::create("topics.json").unwrap();
-        serde_json::to_writer(&topics_file, &*SUBS).unwrap();
+        let mut subs_file: File = File::create(SUBS_FILE_PATH).unwrap();
+        let subs_bytes = bson::to_vec(SUBS.lock().unwrap().deref()).unwrap();
+        if let Err(err) = subs_file.write(subs_bytes.as_slice()) {
+            eprintln!("Couldn't write subs backup file: {}", err.to_string());
+        }
 
-        let requests_file: File = File::create("requests.json").unwrap();
-        serde_json::to_writer(&requests_file, &*REQUESTS).unwrap();
+        let mut topics_file: File = File::create(TOPICS_FILE_PATH).unwrap();
+        let topics_bytes = bson::to_vec(TOPICS.lock().unwrap().deref()).unwrap();
+        if let Err(err) = topics_file.write(topics_bytes.as_slice()) {
+            eprintln!("Couldn't write topic backup file: {}", err.to_string());   
+        }
 
-        let queue_file: File = File::create("queue.json").unwrap();
-        serde_json::to_writer(&queue_file, &*QUEUE).unwrap();
     });
 
     loop {
-        let (req_id, req) = rcv_msg(&socket);
-
-        parse_request(&socket, &req_id, req);
+        handle_requests(&socket);
     }
-    
+
 }
 
-fn add_pend_req(topic: String, request_id: String) {
-    let mut req = REQUESTS.lock().unwrap();
-
-    if req.contains_key(&topic) {
-        req.get_mut(&topic).unwrap().insert(request_id);
+fn recover_state(){
+    match File::open(TOPICS_FILE_PATH) {
+        Ok(file) => *TOPICS.lock().unwrap() = bson::from_reader(file).unwrap(),
+        Err(err) => println!("Couldn't read Topics state! Creating a new one in the next backup...{}", err.to_string())
     }
-    else{
-        let mut s : HashSet<String> = HashSet::new();
-        s.insert(request_id);
-        req.insert(topic,s);
+
+    match File::open(SUBS_FILE_PATH) {
+        Ok(file) => *SUBS.lock().unwrap() = bson::from_reader(file).unwrap(),
+        Err(err) => println!("Couldn't read Subscriber state! Creating a new one in the next backup...{}", err.to_string())
     }
 }
 
-fn check_pend_req(topic: String, socket: &zmq::Socket) {
-    let mut topics = SUBS.lock().unwrap();
-    let mut req = REQUESTS.lock().unwrap();
-    let mut queue = QUEUE.lock().unwrap();
+fn handle_get(request: GetRequest) -> Message {
+    let subs = &mut *SUBS.lock().unwrap();
+    let topics = &mut *TOPICS.lock().unwrap();
+    let post_payload: Vec<u8>;
+    let post_no: u64;
 
-    if req.contains_key(&topic) {
-        let pend_req = req.get_mut(&topic).unwrap();
 
-        for id in pend_req.iter() {
-            let v = queue.get_mut(id).unwrap().pop_front().unwrap();
+    if !subs.contains_key(&request.sub_id) {
+        return BrokerErrorMessage::new(BrokerErrorType::SubscriberNotRegistered, String::from("TODO: brokerid")).as_message();
+    }
 
-            if send_msg(&socket, &id, format!("OK {}", v).as_str()) == -1 {
-                queue.get_mut(id).unwrap().push_front(v);
-            }
+    {
+        let subscriber_data = subs.get_mut(&request.sub_id).unwrap(); 
+        if subscriber_data.topic != request.topic {
+            return BrokerErrorMessage::new(BrokerErrorType::TopicMismatch, String::from("TODO: brokerid")).as_message();
+        }
+        if !topics.contains_key(&request.topic) {
+            return BrokerErrorMessage::new(BrokerErrorType::InhexistantTopic, String::from("TODO: brokerid")).as_message();
         }
 
-        //req.remove(&topic);
+        post_no = subscriber_data.last_read_post + 1;
+        match topics.get(&request.topic).unwrap().posts.get(&post_no.to_string()) {
+            Some(payload) => post_payload = payload.clone(),
+            None => return BrokerErrorMessage::new(BrokerErrorType::NoPostsInTopic, String::from("TODO: brokerid")).as_message()
+        }
+    
+        // Change status to waiting for ACK
+        subscriber_data.change_status();
     }
-}
 
-
-fn rcv_msg(socket: &zmq::Socket) -> (String, String){
-    let res = socket.recv_multipart(0);
-    let message_id;
-    let message_bytes;
-
-    match res {
-        Ok(payload) => {
-            match str::from_utf8(&payload[0]) { // String::from utf not useful, so str version instead
-                Ok(string_msg) => message_id = String::from(string_msg),
-                Err(conv_err) => {
-                    println!("Message id convesion from utf8 to string error ({0})", conv_err);
-                    message_id = "".to_string(); // when err, set empty string
-                }
-            };
-
-            match str::from_utf8(&payload[1]) {
-                Ok(string_msg) => message_bytes = String::from(string_msg),
-                Err(conv_err) => {
-                    println!("Message bytes convesion from utf8 to string error ({0})", conv_err);
-                    message_bytes = "".to_string();
-                }
-            };
-            
-            return (message_id, message_bytes);
-        },
-        Err(err) => {
-            println!("Error reading message ({0})", err);
-            return ("".to_string(), "".to_string());
+    // Remove already read messages
+    let mut min_last_read_post: u64 = u64::MAX;
+    let posts = &mut topics.get_mut(&request.topic).unwrap().posts; 
+    for (_, sub_data) in subs {
+        if sub_data.topic == request.topic && sub_data.last_read_post < min_last_read_post {
+            min_last_read_post = sub_data.last_read_post;
         }
     }
-}
-
-fn send_msg(socket: &zmq::Socket, message_id: &String, message_bytes: &str) -> i32{
-    let res = socket.send_multipart([message_id.as_bytes(), message_bytes.as_bytes()], 0);
-
-    match res {
-        Ok(_) => return 0,
-        Err(err) => {
-            println!("Error sending message ({0})", err);
-            return 1;
+    let mut keys_to_remove: HashSet<String> = HashSet::new();
+    for (post_no, _) in posts.iter() {
+        if post_no.parse::<u64>().unwrap() <= min_last_read_post {
+            keys_to_remove.insert(post_no.clone());
         }
     }
+    posts.retain(|k, _| !keys_to_remove.contains(k));
+
+    GetReply::new(request.sub_id.clone(), post_no, 
+            String::from("TODO: brokerid"), post_payload).as_message()
 }
 
+fn handle_put(request: PutRequest) -> Message {
+    let topics = &mut *TOPICS.lock().unwrap();
+    let received_uuids = &mut *RECEIVED_UUIDS.lock().unwrap();
 
+    if received_uuids.contains(&request.message_uuid) {
+        return BrokerErrorMessage::new(BrokerErrorType::DuplicateMessage, String::from("TODO: brokerid")).as_message();
+    }
+    if !topics.contains_key(&request.topic)  {
+        return BrokerErrorMessage::new(BrokerErrorType::InhexistantTopic, String::from("TODO: brokerid")).as_message();
+    }
+    let new_counter_value = topics.get_mut(&request.topic).unwrap().increment_counter();
+    topics.get_mut(&request.topic).unwrap().posts.insert(new_counter_value.to_string(), request.payload);
+    received_uuids.insert(request.message_uuid.clone());
 
-fn parse_request(socket: &zmq::Socket, request_id: &String, request: String) {
-    let mut topic_list = SUBS.lock().unwrap();
-    let mut queue = QUEUE.lock().unwrap();
+    PutReply::new(request.message_uuid.clone(), request.topic.clone(), String::from("TODO: brokerid")).as_message()
+}
 
-    let split: Vec<_> = request.splitn(2," ").collect();
+fn handle_sub(request: SubRequest) -> Message {
+
+    let subs = &mut *SUBS.lock().unwrap();
+    let topics = &mut *TOPICS.lock().unwrap();
+
+    // Subscriber already subscribed
+    if subs.contains_key(&request.sub_id) {
+        return BrokerErrorMessage::new(BrokerErrorType::SubscriberAlreadyRegistered, String::from("TODO: brokerid")).as_message();
+    } 
+
+    let subs_last_read_post_no;
+    if !topics.contains_key(&request.topic) {
+        topics.insert(request.topic.clone(), TopicData::new());
+        subs_last_read_post_no = 0;
+    } else {
+        subs_last_read_post_no = topics.get(&request.topic).unwrap().post_counter;
+    }
+    subs.insert(request.sub_id.clone(), SubscriberData::new(request.topic.clone(), subs_last_read_post_no));
     
-    let request_type = split[0];
+    SubReply::new(request.sub_id.clone(), request.topic.clone(), String::from("TODO: brokerid")).as_message()
+}
 
-    let start;
-    let mut end = 0; 
-    let mut topic = "";
+fn handle_unsub(request: UnsubRequest) -> Message {
+    let subs = &mut *SUBS.lock().unwrap();
+
+    // Subscriber not subscribed
+    if !subs.contains_key(&request.sub_id) {
+        return BrokerErrorMessage::new(BrokerErrorType::SubscriberNotRegistered, String::from("TODO: brokerid")).as_message();
+    }
+    subs.remove(&request.sub_id);
     
-    if split.len() >= 2 {
-        start = split[1].find("[").unwrap_or(0) + 1;
-        end = split[1].find("]").unwrap_or(split[1].len());
-        topic = &split[1][start..end];
+    UnsubReply::new(request.sub_id.clone(), String::from("TODO: brokerid")).as_message()
+}
+
+fn handle_get_ack(request: AckRequest) -> Message {
+    let subs = &mut *SUBS.lock().unwrap();
+
+    if !subs.contains_key(&request.sub_id) {
+        return BrokerErrorMessage::new(BrokerErrorType::SubscriberNotRegistered, String::from("TODO: brokerid")).as_message();
+    }
+    let subscriber_data: &mut SubscriberData = subs.get_mut(&request.sub_id).unwrap(); 
+
+    if (subscriber_data.last_read_post + 1) != request.message_no {
+        return BrokerErrorMessage::new(BrokerErrorType::AckMessageMismatch, String::from("TODO: brokerid")).as_message();
     }
 
-    match request_type {
-        "SUB" => {
-            if topic_list.contains_key(topic){
-                let _tmap = topic_list.get_mut(topic).unwrap(); 
-                
-                if !_tmap.contains(request_id){
-                    _tmap.insert(String::from(request_id));
-                    queue.insert(request_id.to_string(),VecDeque::new());
-                }
-            else{
-                let mut _tmap: HashSet<String> = HashSet::new();
-                _tmap.insert(String::from(request_id));
-                topic_list.insert(topic.to_string(), _tmap);
-                queue.insert(request_id.to_string(),VecDeque::new());
-            }
-            send_msg(&socket, &request_id, "OK");
-            }
-        },
-        "UNSUB" => {
-            if topic_list.contains_key(topic){
-                let _tmap = topic_list.get_mut(topic).unwrap();
-                
-                if _tmap.contains(request_id){
-                    _tmap.remove(&String::from(request_id));
-                    queue.remove(request_id);
+    subscriber_data.increment_last_read();
+    subscriber_data.change_status();
 
-                    if _tmap.len() == 0 {
-                        topic_list.remove(topic);
-                    }
-                }
+    AckReply::new(request.sub_id.clone(), request.message_no.clone()).as_message()
+}
 
+fn handle_requests(socket: &zmq::Socket) {
+    
+    let req_bytes: Vec<u8> = socket.recv_bytes(0).unwrap();
+    let req_message: Message = bson::from_slice(req_bytes.as_slice()).unwrap();
 
-            send_msg(&socket, &request_id, "OK");
+    let rep_message = match req_message.req_type.as_str() {
+        GET_REQ_HEAD => handle_get(bson::from_bson(req_message.payload).unwrap()),
+        GET_ACK_HEAD => handle_get_ack(bson::from_bson(req_message.payload).unwrap()),
+        PUT_REQ_HEAD => handle_put(bson::from_bson(req_message.payload).unwrap()),
+        SUB_REQ_HEAD => handle_sub(bson::from_bson(req_message.payload).unwrap()),
+        UNSUB_REQ_HEAD => handle_unsub(bson::from_bson(req_message.payload).unwrap()),
+        _ => BrokerErrorMessage::new(BrokerErrorType::UnknownMessage, String::from("TODO: brokerid")).as_message()
+    };
 
-            }
-        },
-        "GET" => {
-            if topic_list.contains_key(topic){
-                let _tmap = topic_list.get_mut(topic).unwrap();
-
-                if _tmap.contains(request_id){
-                    let first = queue.get_mut(request_id).unwrap().pop_front();
-                    if first == None {
-                        add_pend_req(String::from(topic),String::from(request_id));
-                    }
-                    else{
-                        let v = first.unwrap();
-                        if send_msg(&socket, &request_id, format!("OK {}", v).as_str()) == -1 {
-                            queue.get_mut(request_id).unwrap().push_front(v);
-                        }
-                    }
-                    
-                }
-                else{
-                    send_msg(&socket, &request_id, "NS");
-                }
-
-            }
-            else {
-                send_msg(&socket, &request_id, "NF");
-            }
-
-        },
-        "PUT" => {
-            if topic_list.contains_key(topic) {
-                let set = topic_list.get_mut(topic).unwrap();
-                let msg = &split[1][end +1..];
-
-                for id in set.iter() {
-                    let value = queue.get_mut(id).unwrap();
-                    value.push_back(String::from(msg.trim()))
-                }
-
-                drop(topic_list);
-
-                check_pend_req(String::from(topic), socket);
-            }
-
-        },
-        _ => {
-            send_msg(&socket, &request_id, "NOK");
-        },
-    }
+    socket.send(rep_message.to_bytes().unwrap(), 0).unwrap();
 }

@@ -11,7 +11,7 @@ pub struct SubscriberContext {
     pub sub_id: String,
     pub topic: String,
     pub known_broker_id: Option<String>,
-    pub next_message_id: u64
+    pub next_post_no: u64
 }
 
 impl SubscriberContext {
@@ -20,8 +20,12 @@ impl SubscriberContext {
             sub_id,
             topic,
             known_broker_id: None,
-            next_message_id: 0
+            next_post_no: 1
         }
+    }
+
+    pub fn increment_next_post_no(&mut self) {
+        self.next_post_no += 1
     }
 
     pub fn read(sub_id: String) -> Result<SubscriberContext, ContextIOError> {
@@ -48,14 +52,18 @@ impl SubscriberContext {
 }
 
 impl FileWritable<SubscriberContext> for SubscriberContext {
+    fn get_prefix(&self) -> &'static str {
+        return SUB_STORAGE_PATH;
+    }
+
     fn build_path(&self) -> String {
-        return format!("{}{}", SUB_STORAGE_PATH, self.sub_id);
+        return format!("{}{}.bson", SUB_STORAGE_PATH, self.sub_id);
     }
 
     fn from_file(id: &String) -> Result<SubscriberContext, ContextIOError> {
-        read(format!("{}{}", Self::build_prefix(), id))
+        read(format!("{}{}.bson", Self::build_prefix(), id))
     }
-
+    
     fn build_prefix() -> &'static str {
         return SUB_STORAGE_PATH;
     }

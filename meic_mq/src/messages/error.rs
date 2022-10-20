@@ -8,7 +8,12 @@ pub const REQUEST_HEADER: &str = "ERR";
 pub enum BrokerErrorType {
     SubscriberNotRegistered,
     SubscriberAlreadyRegistered,
-    DuplicateMessage
+    InhexistantTopic,
+    DuplicateMessage,
+    TopicMismatch,
+    AckMessageMismatch,
+    UnknownMessage,
+    NoPostsInTopic
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -19,13 +24,28 @@ pub struct BrokerErrorMessage {
 }
 
 impl BrokerErrorMessage {
-    pub fn new(error_type: BrokerErrorType, broker_id: String, description: String) -> BrokerErrorMessage {
-        BrokerErrorMessage {
-            error_type: error_type,
-            broker_id: broker_id,
-            description: description
+    pub fn new(error_type: BrokerErrorType, broker_id: String) -> BrokerErrorMessage {
+        match error_type {
+            BrokerErrorType::SubscriberAlreadyRegistered => BrokerErrorMessage { error_type, broker_id,
+                description: format!("You are already subscribed to a topic") },
+            BrokerErrorType::SubscriberNotRegistered => BrokerErrorMessage { error_type, broker_id,
+                description: format!("You are not subscribed to that topic") },
+            BrokerErrorType::InhexistantTopic => BrokerErrorMessage { error_type, broker_id,
+                description: format!("The topic mentioned in the request does not exist") },
+            BrokerErrorType::DuplicateMessage => BrokerErrorMessage { error_type, broker_id,
+                description: format!("The message you sent is a duplicate message") },
+            BrokerErrorType::TopicMismatch => BrokerErrorMessage { error_type, broker_id,
+                description: format!("The topic you are subscribed is different from the one you submitted") },
+            BrokerErrorType::AckMessageMismatch => BrokerErrorMessage { error_type, broker_id,
+                description: format!("The ack message id did not match with the last read post") },
+            BrokerErrorType::UnknownMessage => BrokerErrorMessage {error_type, broker_id, 
+                description: format!("Couldn't recognize the type of your message") },
+            BrokerErrorType::NoPostsInTopic => BrokerErrorMessage {error_type, broker_id, 
+                description: format!("There are still no posts in that topic") }
         }
     }
+
+
 }
 
 impl NetworkTradeable<BrokerErrorMessage> for BrokerErrorMessage {

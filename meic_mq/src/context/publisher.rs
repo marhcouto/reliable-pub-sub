@@ -16,14 +16,10 @@ pub struct PublisherContext {
 
 impl PublisherContext {
     pub fn new(pub_id: String) -> PublisherContext {
-        let publisher_path = format!("{}{}", PUB_STORAGE_PATH, pub_id);
-        match super::read(publisher_path) {
-            Ok(data) => data,
-            Err(_) => PublisherContext {
-                pub_id,
-                known_broker_id: None,
-                published_messages: HashMap::new()
-            }
+        PublisherContext {
+            pub_id,
+            known_broker_id: None,
+            published_messages: HashMap::new()
         }
     }
 
@@ -55,12 +51,16 @@ impl PublisherContext {
 }
 
 impl FileWritable<PublisherContext> for PublisherContext {
+    fn get_prefix(&self) -> &'static str {
+        return PUB_STORAGE_PATH;
+    }
+
     fn build_path(&self) -> String {
-        return format!("{}{}", PUB_STORAGE_PATH, self.pub_id);
+        return format!("{}{}.bson", PUB_STORAGE_PATH, self.pub_id);
     }
 
     fn from_file(id: &String) -> Result<PublisherContext, ContextIOError> {
-        read(format!("{}{}", Self::build_prefix(), id))
+        read(format!("{}{}.bson", Self::build_prefix(), id))
     }
 
     fn build_prefix() -> &'static str {

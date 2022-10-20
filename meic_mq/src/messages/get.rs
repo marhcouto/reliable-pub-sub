@@ -17,6 +17,7 @@ pub struct Reply {
     pub sub_id: String,
     pub message_no: u64,
     pub broker_id: String,
+    #[serde(with = "serde_bytes")]
     pub payload: Vec<u8>,
 }
 
@@ -108,7 +109,7 @@ impl NetworkTradeable<Reply> for Reply {
 
 impl NetworkTradeable<Ack> for Ack {
     fn as_message(&self) -> Message {
-        Message::new(REQUEST_HEADER.to_string(), bson::to_bson(self).unwrap())
+        Message::new(ACK_HEADER.to_string(), bson::to_bson(self).unwrap())
     }
 
     fn from_message(message: Message) -> Result<Ack, DeserializationErrors> {
@@ -124,7 +125,7 @@ impl NetworkTradeable<Ack> for Ack {
 
 impl NetworkTradeable<AckReply> for AckReply {
     fn as_message(&self) -> Message {
-        Message::new(REPLY_HEADER.to_string(), bson::to_bson(self).unwrap())
+        Message::new(ACK_REPLY_HEADER.to_string(), bson::to_bson(self).unwrap())
     }
 
     fn from_message(message: Message) -> Result<AckReply, DeserializationErrors> {

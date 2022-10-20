@@ -9,7 +9,7 @@ pub const REPLY_HEADER: &str = "PUT_REPL";
 pub struct Request {
     pub pub_id: String,
     pub topic: String,
-    pub message_id: String,
+    pub message_uuid: String,
     #[serde(with = "serde_bytes")]
     pub payload: Vec<u8>
 }
@@ -20,7 +20,7 @@ impl Request {
         Request {
             pub_id: pub_id,
             topic: topic,
-            message_id: uuid.to_string(),
+            message_uuid: uuid.to_string(),
             payload: payload
         }
     }
@@ -44,15 +44,15 @@ impl NetworkTradeable<Request> for Request {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Reply {
-    pub message_id: String,
+    pub message_uuid: String,
     pub topic: String,
     pub broker_id: String
 }
 
 impl Reply {
-    pub fn new(message_id: String, topic: String, broker_id: String) -> Reply {
+    pub fn new(message_uuid: String, topic: String, broker_id: String) -> Reply {
         Reply {
-            message_id: message_id,
+            message_uuid: message_uuid,
             topic: topic,
             broker_id: broker_id
         }
@@ -62,7 +62,7 @@ impl Reply {
         if self.topic != request.topic {
             return false;
         }
-        if self.message_id != request.message_id {
+        if self.message_uuid != request.message_uuid {
             return false;
         }
 
