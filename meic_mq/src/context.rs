@@ -10,6 +10,7 @@ pub enum ContextIOError {
 }
 
 trait FileWritable<T> {
+    fn get_prefix(&self) -> &'static str;
     fn build_path(&self) -> String;
     fn build_prefix() -> &'static str;
     fn from_file(id: &String) -> Result<T, ContextIOError>;
@@ -17,7 +18,7 @@ trait FileWritable<T> {
 
 fn save<T>(context: &T) -> Result<(), ContextIOError>
 where T: Serialize + FileWritable<T> {
-    if let Err(err) = std::fs::create_dir_all(context.build_path()) {
+    if let Err(err) = std::fs::create_dir_all(context.get_prefix()) {
         return Err(ContextIOError::ErrorCreatingDirectory(err.to_string()));
     }
     let data_bytes = match bson::to_vec(context) {

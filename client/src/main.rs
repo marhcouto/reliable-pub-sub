@@ -24,6 +24,8 @@ fn main() {
         "subscriber" => {
             match service_number {
                 1 => subscriber::subscriber1(),
+                2 => subscriber::subscriber2(),
+                3 => subscriber::subscriber3(),
                 _ => panic!("Function subscriber{} does not exist", service_number)
             }
         },

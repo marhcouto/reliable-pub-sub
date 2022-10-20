@@ -39,21 +39,17 @@ fn _get(socket: &zmq::Socket, sub_ctx: &mut SubscriberContext, request: &get::Re
             if known_broker_id != &repl.broker_id {
                 println!("New Broker in GET");
                 // TODO: what is to do when broker is new
+                sub_ctx.known_broker_id = Some(repl.broker_id.clone());
             }
-            sub_ctx.known_broker_id = Some(repl.broker_id.clone());
         } 
         None => {
             sub_ctx.known_broker_id = Some(repl.broker_id.clone());
         }
     }
 
-    // Probably Useless
+    // Probably Useless - checks if user_id is correct
     if !repl.match_request(&request) {
         return Err("Unexpected reply for get request".to_string());
-    }
-
-    if sub_ctx.next_message_id != repl.message_no {
-        return _get(socket, sub_ctx, request);
     }
 
     let ack: get::Ack = get::Ack {
@@ -70,9 +66,15 @@ fn _get(socket: &zmq::Socket, sub_ctx: &mut SubscriberContext, request: &get::Re
         return Err(error_struct.description);
     }
 
-    if repl_message.req_type != get::ACK_REPLY_HEADER {
-        return Err(format!("Unexpected message type '{}' expecting '{}'", repl_message.req_type, put::REPLY_HEADER));
+    if ack_repl_message.req_type != get::ACK_REPLY_HEADER {
+        return Err(format!("Unexpected message type '{}' expecting '{}'", repl_message.req_type, get::ACK_REPLY_HEADER));
     }
+
+    if sub_ctx.next_post_no != repl.message_no {
+        return _get(socket, sub_ctx, request);
+    }
+
+    sub_ctx.increment_next_post_no();
 
     Ok(repl.payload)
 }
@@ -85,8 +87,8 @@ pub fn put(pub_ctx: &mut PublisherContext, request: &put::Request) -> Result<(),
 }
 
 fn _put(socket: &zmq::Socket, pub_ctx: &mut PublisherContext, request: &put::Request) -> Result<(), String> {
-    if pub_ctx.is_message_new(&request.topic, &request.message_uuid) {
-        println!("Publisher claims that the message was already sent");
+    if !pub_ctx.is_message_new(&request.topic, &request.message_uuid) {
+        return Err(format!("Publisher claims that the message {} was already sent", &request.message_uuid));
     }
     socket.send(request.as_message().to_bytes().unwrap(), 0).unwrap();
     let repl_bytes = socket.recv_bytes(0).unwrap();
