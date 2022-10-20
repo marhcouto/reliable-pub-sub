@@ -141,9 +141,13 @@ fn handle_get(request: GetRequest) -> Message {
     if !topics.contains_key(&request.topic) {
         return BrokerErrorMessage::new(BrokerErrorType::InhexistantTopic, String::from("TODO: brokerid")).as_message();
     }
+    // não falta aumentar o last read post perma???
+    // subscriber_data.last_read_post += 1; // e tirar os 1's dps
     let post_payload: Vec<u8> = topics.get(&request.topic).unwrap().posts.get(&(subscriber_data.last_read_post + 1)).unwrap().clone();
     GetReply::new(request.sub_id.clone(), subscriber_data.last_read_post + 1, 
             String::from("TODO: brokerid"), post_payload).as_message()
+
+    
 }
 
 fn handle_put(request: PutRequest) -> Message {
@@ -199,7 +203,18 @@ fn handle_unsub(request: UnsubRequest) -> Message {
 }
 
 fn handle_get_ack(request: AckRequest) -> Message {
-    
+    let mut subs = SUBS.lock().unwrap().deref();
+
+    if !subs.contains_key(&request.sub_id) {
+        return BrokerErrorMessage::new(BrokerErrorType::SubscriberNotRegistered, String::from("TODO: brokerid")).as_message();
+    }
+    let subscriber_data: &SubscriberData = subs.get(&request.sub_id).unwrap(); 
+
+    if (subscriber_data.last_read_post != request.message_no){
+        return BrokerErrorMessage::new(BrokerErrorType::AckMessageMismatch, String::from("TODO: brokerid")).as_message();
+    }
+
+    AckReply::new(request.sub_id.clone(), request.message_no.clone()).as_message()
 }
 
 fn handle_error_message(request: AckRequest) -> Message {

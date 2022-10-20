@@ -10,7 +10,8 @@ pub enum BrokerErrorType {
     SubscriberAlreadyRegistered,
     InhexistantTopic,
     DuplicateMessage,
-    TopicMismatch
+    TopicMismatch,
+    AckMessageMismatch
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,7 +33,9 @@ impl BrokerErrorMessage {
             BrokerErrorType::DuplicateMessage => BrokerErrorMessage { error_type, broker_id,
                 description: format!("The message you sent is a duplicate message") },
             BrokerErrorType::TopicMismatch => BrokerErrorMessage { error_type, broker_id,
-                description: format!("The topic you are subscribed is different from the one you submitted") } 
+                description: format!("The topic you are subscribed is different from the one you submitted") },
+            BrokerErrorType::AckMessageMismatch => BrokerErrorMessage { error_type, broker_id,
+                description: format!("The ack message id did not match with the last read post") } 
         }
     }
 
