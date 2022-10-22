@@ -142,7 +142,6 @@ fn handle_get(state: &mut BrokerState, request: GetRequest) -> Message {
         }
 
         post_no = subscriber_data.last_read_post + 1;
-        dbg!(subscriber_data.last_read_post);
         match state.topics.get(&request.topic).unwrap().posts.get(&post_no.to_string()) {
             Some(payload) => post_payload = payload.clone(),
             None => return BrokerErrorMessage::new(BrokerErrorType::NoPostsInTopic, state.broker_uuid.clone()).as_message()
@@ -170,7 +169,7 @@ fn handle_put(state: &mut BrokerState, request: PutRequest) -> Message {
     let new_counter_value = state.topics.get_mut(&request.topic).unwrap().increment_counter();
     state.topics.get_mut(&request.topic).unwrap().posts.insert(new_counter_value.to_string(), request.payload);
     state.received_uuids.insert(request.message_uuid.clone());
-    println!("Topics data structure after put: {:?}", state.topics.get(&request.topic).unwrap());
+    println!("Topics data structure after put: {:?}", state.topics.get(&request.topic).unwrap().posts.keys());
 
     PutReply::new(request.message_uuid.clone(), request.topic.clone(), state.broker_uuid.clone()).as_message()
 }
@@ -237,7 +236,7 @@ fn handle_get_ack(state: &mut BrokerState, request: AckRequest) -> Message {
         }
     }
     posts.retain(|k, _| !keys_to_remove.contains(k));
-    println!("Topics data structure after acknowledged get: {:?}", posts);
+    println!("Topics data structure after acknowledged get: {:?}", posts.keys());
 
     AckReply::new(request.sub_id.clone(), request.message_no.clone()).as_message()
 }
@@ -254,12 +253,12 @@ fn handle_requests(socket: &zmq::Socket, state: &mut BrokerState) {
         PUT_REQ_HEAD => handle_put(state, bson::from_bson(req_message.payload).unwrap()),
         SUB_REQ_HEAD => {
             let message = handle_sub(state, bson::from_bson(req_message.payload).unwrap());
-            dbg!(state.subs.keys());
+            println!("Known subs: {:?}", state.subs.keys());
             message
         }
         UNSUB_REQ_HEAD => {
             let message = handle_unsub(state, bson::from_bson(req_message.payload).unwrap());
-            dbg!(state.subs.keys());
+            println!("Known subs: {:?}", state.subs.keys());
             message
         }
         _ => BrokerErrorMessage::new(BrokerErrorType::UnknownMessage, state.broker_uuid.clone()).as_message()
