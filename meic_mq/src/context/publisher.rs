@@ -1,5 +1,4 @@
 use serde::{Serialize, Deserialize};
-use std::collections::{HashMap, HashSet};
 
 use super::{ FileWritable, ContextIOError, read };
 use super::super::messages::put;
@@ -10,28 +9,18 @@ const PUB_STORAGE_PATH: &str = "./data/pub/";
 pub struct PublisherContext {
     pub pub_id: String,
     pub known_broker_id: Option<String>,
-    pub published_messages: HashMap<String, HashSet<String>>
 }
 
 impl PublisherContext {
     pub fn new(pub_id: String) -> PublisherContext {
         PublisherContext {
             pub_id,
-            known_broker_id: None,
-            published_messages: HashMap::new()
-        }
-    }
-
-    pub fn is_message_new(&self, topic: &String, message_id: &String) -> bool {
-        match self.published_messages.get(topic) {
-            None => true,
-            Some(set) => !set.contains(message_id)
+            known_broker_id: None
         }
     }
 
     pub fn reset_context(&mut self) {
         self.known_broker_id = None;
-        self.published_messages = HashMap::new()
     }
 
     pub fn read(pub_id: String) -> Result<PublisherContext, ContextIOError> {

@@ -39,15 +39,17 @@ impl NetworkTradeable<Request> for Request {
 pub struct Reply {
     pub sub_id: String,
     pub topic: String,
-    pub broker_id: String
+    pub broker_id: String,
+    pub post_offset: u64
 }
 
 impl Reply {
-    pub fn new(sub_id: String, topic: String, broker_id: String) -> Reply {
+    pub fn new(sub_id: String, topic: String, broker_id: String, post_offset: u64) -> Reply {
         Reply {
             sub_id: sub_id,
             topic: topic,
-            broker_id: broker_id
+            broker_id: broker_id,
+            post_offset: post_offset
         }
     }
 

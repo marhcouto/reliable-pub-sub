@@ -23,7 +23,6 @@ fn _get(socket: &zmq::Socket, sub_ctx: &mut SubscriberContext, request: &get::Re
     socket.send(request.as_message().to_bytes().unwrap(), 0).unwrap();
     let repl_bytes: Vec<u8> = socket.recv_bytes(0).unwrap();
     let repl_message: Message = bson::from_slice(repl_bytes.as_slice()).unwrap();
-
     if repl_message.req_type == error::REQUEST_HEADER {
         let error_struct: error::BrokerErrorMessage = bson::from_bson(repl_message.payload).unwrap();
         match &sub_ctx.known_broker_id {
@@ -45,9 +44,7 @@ fn _get(socket: &zmq::Socket, sub_ctx: &mut SubscriberContext, request: &get::Re
     match &sub_ctx.known_broker_id {
         Some(known_broker_id) => {
             if known_broker_id != &repl.broker_id {
-                println!("New Broker in GET");
-                // TODO: what is to do when broker is new
-                sub_ctx.known_broker_id = Some(repl.broker_id.clone());
+                return Err("NEW_BROKER".to_owned());
             }
         } 
         None => {
@@ -83,7 +80,6 @@ fn _get(socket: &zmq::Socket, sub_ctx: &mut SubscriberContext, request: &get::Re
     }
 
     sub_ctx.increment_next_post_no();
-
     Ok(repl.payload)
 }
 
@@ -95,9 +91,6 @@ pub fn put(pub_ctx: &mut PublisherContext, request: &put::Request) -> Result<(),
 }
 
 fn _put(socket: &zmq::Socket, pub_ctx: &mut PublisherContext, request: &put::Request) -> Result<(), String> {
-    if !pub_ctx.is_message_new(&request.topic, &request.message_uuid) {
-        return Err(format!("Publisher claims that the message {} was already sent", &request.message_uuid));
-    }
     socket.send(request.as_message().to_bytes().unwrap(), 0).unwrap();
     let repl_bytes = socket.recv_bytes(0).unwrap();
 
@@ -156,6 +149,7 @@ fn _subscribe(socket: &zmq::Socket, sub_ctx: &mut SubscriberContext, request: &s
     }
 
     sub_ctx.known_broker_id = Some(repl.broker_id);
+    sub_ctx.next_post_no = repl.post_offset;
 
     Ok(())
 }

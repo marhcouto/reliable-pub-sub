@@ -8,20 +8,12 @@ use uuid::Uuid;
 
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::io::{Write, BufReader, BufRead};
-use std::sync::Mutex;
-use std::str;
+use std::io::{ Write, BufReader };
 use std::env;
-use std::time;
 use std::fs::File;
-use scheduled_thread_pool;
 use serde::{ Serialize, Deserialize };
-use lazy_static::lazy_static;
-use lazy_static::__Deref;
 
-const SUBS_FILE_PATH: &str = "subs.bson";
-const TOPICS_FILE_PATH: &str = "topics.bson";
-const BROKER_UUID_PATH: &str = "broker_id.txt";
+const STATE_FILE_PATH: &str = "state.bson";
 
 #[derive(Debug, Serialize, Deserialize)]
 enum SubscriberStatus {
@@ -76,11 +68,23 @@ impl TopicData {
     }
 }
 
-lazy_static!{
-    static ref SUBS: Mutex<HashMap<String, SubscriberData>> = Mutex::new(HashMap::new());
-    static ref TOPICS: Mutex<HashMap<String, TopicData>> = Mutex::new(HashMap::new());
-    static ref RECEIVED_UUIDS: Mutex<HashSet<String>> = Mutex::new(HashSet::new());
-    static ref BROKER_UUID: Mutex<String> = Mutex::new(String::new());
+#[derive(Debug, Serialize, Deserialize)]
+struct BrokerState {
+    broker_uuid: String,
+    subs: HashMap<String, SubscriberData>,
+    topics: HashMap<String, TopicData>,
+    received_uuids: HashSet<String>,
+}
+
+impl BrokerState {
+    pub fn new() -> BrokerState {
+        BrokerState {
+            broker_uuid: Uuid::new_v4().to_string(),
+            subs: HashMap::new(),
+            topics: HashMap::new(),
+            received_uuids: HashSet::new()
+        }
+    }
 }
 
 fn main() {
@@ -93,84 +97,55 @@ fn main() {
 
     let _arguments: Vec<String> = env::args().collect();
 
-    recover_state();
-
-    let st_pool = scheduled_thread_pool::ScheduledThreadPool::new(1);
-
-    st_pool.execute_at_fixed_rate(time::Duration::from_secs(5), time::Duration::from_secs(5), || {
-        let mut subs_file: File = File::create(SUBS_FILE_PATH).unwrap();
-        let subs_bytes = bson::to_vec(SUBS.lock().unwrap().deref()).unwrap();
-        if let Err(err) = subs_file.write_all(subs_bytes.as_slice()) {
-            eprintln!("Couldn't write subs backup file: {}", err.to_string());
-        }
-
-        let mut topics_file: File = File::create(TOPICS_FILE_PATH).unwrap();
-        let topics_bytes = bson::to_vec(TOPICS.lock().unwrap().deref()).unwrap();
-        if let Err(err) = topics_file.write_all(topics_bytes.as_slice()) {
-            eprintln!("Couldn't write topic backup file: {}", err.to_string());   
-        }
-
-        let mut broker_uuid_file: File = File::create(BROKER_UUID_PATH).unwrap();
-        if let Err(err) = broker_uuid_file.write_all(&*BROKER_UUID.lock().unwrap().to_string().as_bytes()) {
-            eprintln!("Couldn't write topic backup file: {}", err.to_string());   
-        }
-    });
+    let mut state = recover_state();
 
     loop {
-        handle_requests(&socket);
+        handle_requests(&socket, &mut state);
+        save_state(&state);
     }
 
 }
 
-fn recover_state(){
-    match File::open(TOPICS_FILE_PATH) {
-        Ok(file) => *TOPICS.lock().unwrap() = bson::from_reader(file).unwrap(),
-        Err(err) => println!("Couldn't read Topics state! Creating a new one in the next backup...{}", err.to_string())
+fn save_state(state: &BrokerState) {
+    let mut state_file: File = File::create(STATE_FILE_PATH).unwrap();
+    let state_bytes = bson::to_vec(state).unwrap();
+    if let Err(err) = state_file.write_all(state_bytes.as_slice()) {
+        eprintln!("Couldn't write subs backup file: {}", err.to_string());
     }
+}
 
-    match File::open(SUBS_FILE_PATH) {
-        Ok(file) => *SUBS.lock().unwrap() = bson::from_reader(file).unwrap(),
-        Err(err) => println!("Couldn't read Subscriber state! Creating a new one in the next backup...{}", err.to_string())
-    }
-
-    match File::open(BROKER_UUID_PATH) {
+fn recover_state() -> BrokerState {
+    match File::open(STATE_FILE_PATH) {
         Ok(file) => {
-            let line_buffer = BufReader::new(file).lines();
-            for line in line_buffer {
-                *BROKER_UUID.lock().unwrap() = line.unwrap();
-            }
-        }
-        Err(_) => {
-            println!("Couldn't read Broker UUID. Creating a new one and saving in the next backup");
-            *BROKER_UUID.lock().unwrap() = Uuid::new_v4().to_string();
-        }
+            let state_buffer = BufReader::new(file);
+            bson::from_reader(state_buffer).unwrap()
+        },
+        Err(_) => BrokerState::new()
     }
 }
 
-fn handle_get(request: GetRequest) -> Message {
-    let subs = &mut *SUBS.lock().unwrap();
-    let topics = &mut *TOPICS.lock().unwrap();
+fn handle_get(state: &mut BrokerState, request: GetRequest) -> Message {
     let post_payload: Vec<u8>;
     let post_no: u64;
 
-
-    if !subs.contains_key(&request.sub_id) {
-        return BrokerErrorMessage::new(BrokerErrorType::SubscriberNotRegistered, (*BROKER_UUID.lock().unwrap()).to_string()).as_message();
+    if !state.subs.contains_key(&request.sub_id) {
+        return BrokerErrorMessage::new(BrokerErrorType::SubscriberNotRegistered, state.broker_uuid.clone()).as_message();
     }
 
     {
-        let subscriber_data = subs.get_mut(&request.sub_id).unwrap(); 
+        let subscriber_data = state.subs.get_mut(&request.sub_id).unwrap(); 
         if subscriber_data.topic != request.topic {
-            return BrokerErrorMessage::new(BrokerErrorType::TopicMismatch, (*BROKER_UUID.lock().unwrap()).to_string()).as_message();
+            return BrokerErrorMessage::new(BrokerErrorType::TopicMismatch, state.broker_uuid.clone()).as_message();
         }
-        if !topics.contains_key(&request.topic) {
-            return BrokerErrorMessage::new(BrokerErrorType::InhexistantTopic, (*BROKER_UUID.lock().unwrap()).to_string()).as_message();
+        if !state.topics.contains_key(&request.topic) {
+            return BrokerErrorMessage::new(BrokerErrorType::InhexistantTopic, state.broker_uuid.clone()).as_message();
         }
 
         post_no = subscriber_data.last_read_post + 1;
-        match topics.get(&request.topic).unwrap().posts.get(&post_no.to_string()) {
+        dbg!(subscriber_data.last_read_post);
+        match state.topics.get(&request.topic).unwrap().posts.get(&post_no.to_string()) {
             Some(payload) => post_payload = payload.clone(),
-            None => return BrokerErrorMessage::new(BrokerErrorType::NoPostsInTopic, (*BROKER_UUID.lock().unwrap()).to_string()).as_message()
+            None => return BrokerErrorMessage::new(BrokerErrorType::NoPostsInTopic, state.broker_uuid.clone()).as_message()
         }
     
         // Change status to waiting for ACK
@@ -180,87 +155,76 @@ fn handle_get(request: GetRequest) -> Message {
     GetReply::new(
         request.sub_id.clone(), 
         post_no, 
-        (*BROKER_UUID.lock().unwrap()).to_string(),
+        state.broker_uuid.clone(),
         post_payload
     ).as_message()
 }
 
-fn handle_put(request: PutRequest) -> Message {
-    let topics = &mut *TOPICS.lock().unwrap();
-    let received_uuids = &mut *RECEIVED_UUIDS.lock().unwrap();
-
-    if received_uuids.contains(&request.message_uuid) {
-        return BrokerErrorMessage::new(BrokerErrorType::DuplicateMessage, (*BROKER_UUID.lock().unwrap()).to_string()).as_message();
+fn handle_put(state: &mut BrokerState, request: PutRequest) -> Message {
+    if state.received_uuids.contains(&request.message_uuid) {
+        return BrokerErrorMessage::new(BrokerErrorType::DuplicateMessage, state.broker_uuid.clone()).as_message();
     }
-    if !topics.contains_key(&request.topic)  {
-        return BrokerErrorMessage::new(BrokerErrorType::InhexistantTopic, (*BROKER_UUID.lock().unwrap()).to_string()).as_message();
+    if !state.topics.contains_key(&request.topic)  {
+        return BrokerErrorMessage::new(BrokerErrorType::InhexistantTopic, state.broker_uuid.clone()).as_message();
     }
-    let new_counter_value = topics.get_mut(&request.topic).unwrap().increment_counter();
-    topics.get_mut(&request.topic).unwrap().posts.insert(new_counter_value.to_string(), request.payload);
-    received_uuids.insert(request.message_uuid.clone());
-    println!("Topics data structure after put: {:?}", topics);
+    let new_counter_value = state.topics.get_mut(&request.topic).unwrap().increment_counter();
+    state.topics.get_mut(&request.topic).unwrap().posts.insert(new_counter_value.to_string(), request.payload);
+    state.received_uuids.insert(request.message_uuid.clone());
+    println!("Topics data structure after put: {:?}", state.topics.get(&request.topic).unwrap());
 
-    PutReply::new(request.message_uuid.clone(), request.topic.clone(), (*BROKER_UUID.lock().unwrap()).to_string()).as_message()
+    PutReply::new(request.message_uuid.clone(), request.topic.clone(), state.broker_uuid.clone()).as_message()
 }
 
-fn handle_sub(request: SubRequest) -> Message {
-
-    let subs = &mut *SUBS.lock().unwrap();
-    let topics = &mut *TOPICS.lock().unwrap();
-
+fn handle_sub(state: &mut BrokerState, request: SubRequest) -> Message {
     // Subscriber already subscribed
-    if subs.contains_key(&request.sub_id) {
-        return BrokerErrorMessage::new(BrokerErrorType::SubscriberAlreadyRegistered, (*BROKER_UUID.lock().unwrap()).to_string()).as_message();
+    if state.subs.contains_key(&request.sub_id) {
+        return BrokerErrorMessage::new(BrokerErrorType::SubscriberAlreadyRegistered, state.broker_uuid.clone()).as_message();
     } 
 
     let subs_last_read_post_no;
-    if !topics.contains_key(&request.topic) {
-        topics.insert(request.topic.clone(), TopicData::new());
+    if !state.topics.contains_key(&request.topic) {
+        state.topics.insert(request.topic.clone(), TopicData::new());
         subs_last_read_post_no = 0;
     } else {
-        subs_last_read_post_no = topics.get(&request.topic).unwrap().post_counter;
+        subs_last_read_post_no = state.topics.get(&request.topic).unwrap().post_counter;
     }
-    subs.insert(request.sub_id.clone(), SubscriberData::new(request.topic.clone(), subs_last_read_post_no));
-    
-    SubReply::new(request.sub_id.clone(), request.topic.clone(), (*BROKER_UUID.lock().unwrap()).to_string()).as_message()
+    state.subs.insert(request.sub_id.clone(), SubscriberData::new(request.topic.clone(), subs_last_read_post_no));
+
+    SubReply::new(request.sub_id.clone(), request.topic.clone(), state.broker_uuid.clone(), subs_last_read_post_no + 1).as_message()
 }
 
-fn handle_unsub(request: UnsubRequest) -> Message {
-    let subs = &mut *SUBS.lock().unwrap();
-
+fn handle_unsub(state: &mut BrokerState, request: UnsubRequest) -> Message {
     // Subscriber not subscribed
-    if !subs.contains_key(&request.sub_id) {
-        return BrokerErrorMessage::new(BrokerErrorType::SubscriberNotRegistered, (*BROKER_UUID.lock().unwrap()).to_string()).as_message();
+    if !state.subs.contains_key(&request.sub_id) {
+        return BrokerErrorMessage::new(BrokerErrorType::SubscriberNotRegistered, state.broker_uuid.clone()).as_message();
     }
-    subs.remove(&request.sub_id);
+    state.subs.remove(&request.sub_id);
     
-    UnsubReply::new(request.sub_id.clone(), (*BROKER_UUID.lock().unwrap()).to_string()).as_message()
+    UnsubReply::new(request.sub_id.clone(), state.broker_uuid.clone()).as_message()
 }
 
-fn handle_get_ack(request: AckRequest) -> Message {
-    let topics = &mut *TOPICS.lock().unwrap();
-    let subs = &mut *SUBS.lock().unwrap();
-
-    if !subs.contains_key(&request.sub_id) {
-        return BrokerErrorMessage::new(BrokerErrorType::SubscriberNotRegistered, (*BROKER_UUID.lock().unwrap()).to_string()).as_message();
+fn handle_get_ack(state: &mut BrokerState, request: AckRequest) -> Message {
+    if !state.subs.contains_key(&request.sub_id) {
+        return BrokerErrorMessage::new(BrokerErrorType::SubscriberNotRegistered, state.broker_uuid.clone()).as_message();
     }
-    let subscriber_data: &mut SubscriberData = subs.get_mut(&request.sub_id).unwrap(); 
+    let subscriber_data: &mut SubscriberData = state.subs.get_mut(&request.sub_id).unwrap(); 
 
     if (subscriber_data.last_read_post + 1) != request.message_no {
-        return BrokerErrorMessage::new(BrokerErrorType::AckMessageMismatch, (*BROKER_UUID.lock().unwrap()).to_string()).as_message();
+        return BrokerErrorMessage::new(BrokerErrorType::AckMessageMismatch, state.broker_uuid.clone()).as_message();
     }
 
     subscriber_data.increment_last_read();
     subscriber_data.change_status();
-    let sub_topic = match subs.get(&request.sub_id) {
+
+    let sub_topic = match state.subs.get(&request.sub_id) {
         Some(val) => val.topic.clone(),
-        None => return BrokerErrorMessage::new(BrokerErrorType::SubscriberNotRegistered, (*BROKER_UUID.lock().unwrap()).to_string()).as_message()
+        None => return BrokerErrorMessage::new(BrokerErrorType::SubscriberNotRegistered, state.broker_uuid.clone()).as_message()
     };
 
     // Remove already read messages
     let mut min_last_read_post: u64 = u64::MAX;
-    let posts = &mut topics.get_mut(&sub_topic).unwrap().posts; 
-    for (_, sub_data) in subs {
+    let posts = &mut state.topics.get_mut(&sub_topic).unwrap().posts; 
+    for (_, sub_data) in state.subs.iter() {
         if sub_data.topic == sub_topic && sub_data.last_read_post < min_last_read_post {
             min_last_read_post = sub_data.last_read_post;
         }
@@ -273,25 +237,32 @@ fn handle_get_ack(request: AckRequest) -> Message {
         }
     }
     posts.retain(|k, _| !keys_to_remove.contains(k));
-    println!("Topics data structure after acknowledged get: {:?}", topics);
+    println!("Topics data structure after acknowledged get: {:?}", posts);
 
     AckReply::new(request.sub_id.clone(), request.message_no.clone()).as_message()
 }
 
-fn handle_requests(socket: &zmq::Socket) {
+fn handle_requests(socket: &zmq::Socket, state: &mut BrokerState) {
     
     let req_bytes: Vec<u8> = socket.recv_bytes(0).unwrap();
     let req_message: Message = bson::from_slice(req_bytes.as_slice()).unwrap();
 
     println!("Received new request: {}", req_message.req_type);
-    dbg!(&mut *SUBS.lock().unwrap());
     let rep_message = match req_message.req_type.as_str() {
-        GET_REQ_HEAD => handle_get(bson::from_bson(req_message.payload).unwrap()),
-        GET_ACK_HEAD => handle_get_ack(bson::from_bson(req_message.payload).unwrap()),
-        PUT_REQ_HEAD => handle_put(bson::from_bson(req_message.payload).unwrap()),
-        SUB_REQ_HEAD => handle_sub(bson::from_bson(req_message.payload).unwrap()),
-        UNSUB_REQ_HEAD => handle_unsub(bson::from_bson(req_message.payload).unwrap()),
-        _ => BrokerErrorMessage::new(BrokerErrorType::UnknownMessage, (*BROKER_UUID.lock().unwrap()).to_string()).as_message()
+        GET_REQ_HEAD => handle_get(state, bson::from_bson(req_message.payload).unwrap()),
+        GET_ACK_HEAD => handle_get_ack(state, bson::from_bson(req_message.payload).unwrap()),
+        PUT_REQ_HEAD => handle_put(state, bson::from_bson(req_message.payload).unwrap()),
+        SUB_REQ_HEAD => {
+            let message = handle_sub(state, bson::from_bson(req_message.payload).unwrap());
+            dbg!(state.subs.keys());
+            message
+        }
+        UNSUB_REQ_HEAD => {
+            let message = handle_unsub(state, bson::from_bson(req_message.payload).unwrap());
+            dbg!(state.subs.keys());
+            message
+        }
+        _ => BrokerErrorMessage::new(BrokerErrorType::UnknownMessage, state.broker_uuid.clone()).as_message()
     };
 
     socket.send(rep_message.to_bytes().unwrap(), 0).unwrap();

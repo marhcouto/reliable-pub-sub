@@ -1,8 +1,7 @@
 use meic_mq::{context::{publisher::PublisherContext, subscriber::SubscriberContext}, get, subscribe, put};
-use meic_mq::messages::subscribe::Request as SubRequest;
 
 pub fn run() {
-    let mut publisher_tech: PublisherContext = match PublisherContext::from_file(&String::from("tech")) {
+    let mut publisher_tech: PublisherContext = match PublisherContext::from_file(&String::from("Publisher")) {
         Ok(val) => {
             println!("Found pub with data: {:?}", val);
             val
