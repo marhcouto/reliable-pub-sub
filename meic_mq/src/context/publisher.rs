@@ -6,9 +6,8 @@ use super::super::messages::put;
 
 const PUB_STORAGE_PATH: &str = "./data/pub/";
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct PublisherContext {
-    #[serde(skip)]
     pub pub_id: String,
     pub known_broker_id: Option<String>,
     pub published_messages: HashMap<String, HashSet<String>>
@@ -48,6 +47,10 @@ impl PublisherContext {
     pub fn create_put_request(&self, topic: String, payload: Vec<u8>) -> put::Request {
         put::Request::new(self.pub_id.clone(), topic, payload)
     }
+
+    pub fn from_file(id: &String) -> Result<PublisherContext, ContextIOError> {
+        read(format!("{}{}.bson", Self::build_prefix(), id))
+    }
 }
 
 impl FileWritable<PublisherContext> for PublisherContext {
@@ -57,10 +60,6 @@ impl FileWritable<PublisherContext> for PublisherContext {
 
     fn build_path(&self) -> String {
         return format!("{}{}.bson", PUB_STORAGE_PATH, self.pub_id);
-    }
-
-    fn from_file(id: &String) -> Result<PublisherContext, ContextIOError> {
-        read(format!("{}{}.bson", Self::build_prefix(), id))
     }
 
     fn build_prefix() -> &'static str {

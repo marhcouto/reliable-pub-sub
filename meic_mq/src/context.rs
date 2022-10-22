@@ -13,7 +13,6 @@ trait FileWritable<T> {
     fn get_prefix(&self) -> &'static str;
     fn build_path(&self) -> String;
     fn build_prefix() -> &'static str;
-    fn from_file(id: &String) -> Result<T, ContextIOError>;
 }
 
 fn save<T>(context: &T) -> Result<(), ContextIOError>

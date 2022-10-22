@@ -26,6 +26,14 @@ fn _get(socket: &zmq::Socket, sub_ctx: &mut SubscriberContext, request: &get::Re
 
     if repl_message.req_type == error::REQUEST_HEADER {
         let error_struct: error::BrokerErrorMessage = bson::from_bson(repl_message.payload).unwrap();
+        match &sub_ctx.known_broker_id {
+            Some(val) => {
+                if *val != error_struct.broker_id {
+                    return Err("The broker has wiped out its data, need to subscribe again".to_string())
+                }
+            },
+            _ => {},
+        }
         return Err(error_struct.description);
     }
 
