@@ -177,22 +177,6 @@ fn handle_get(request: GetRequest) -> Message {
         subscriber_data.change_status();
     }
 
-    // Remove already read messages
-    let mut min_last_read_post: u64 = u64::MAX;
-    let posts = &mut topics.get_mut(&request.topic).unwrap().posts; 
-    for (_, sub_data) in subs {
-        if sub_data.topic == request.topic && sub_data.last_read_post < min_last_read_post {
-            min_last_read_post = sub_data.last_read_post;
-        }
-    }
-    let mut keys_to_remove: HashSet<String> = HashSet::new();
-    for (post_no, _) in posts.iter() {
-        if post_no.parse::<u64>().unwrap() <= min_last_read_post {
-            keys_to_remove.insert(post_no.clone());
-        }
-    }
-    posts.retain(|k, _| !keys_to_remove.contains(k));
-
     GetReply::new(
         request.sub_id.clone(), 
         post_no, 
@@ -214,6 +198,7 @@ fn handle_put(request: PutRequest) -> Message {
     let new_counter_value = topics.get_mut(&request.topic).unwrap().increment_counter();
     topics.get_mut(&request.topic).unwrap().posts.insert(new_counter_value.to_string(), request.payload);
     received_uuids.insert(request.message_uuid.clone());
+    println!("Topics data structure after put: {:?}", topics);
 
     PutReply::new(request.message_uuid.clone(), request.topic.clone(), (*BROKER_UUID.lock().unwrap()).to_string()).as_message()
 }
@@ -253,6 +238,7 @@ fn handle_unsub(request: UnsubRequest) -> Message {
 }
 
 fn handle_get_ack(request: AckRequest) -> Message {
+    let topics = &mut *TOPICS.lock().unwrap();
     let subs = &mut *SUBS.lock().unwrap();
 
     if !subs.contains_key(&request.sub_id) {
@@ -266,6 +252,28 @@ fn handle_get_ack(request: AckRequest) -> Message {
 
     subscriber_data.increment_last_read();
     subscriber_data.change_status();
+    let sub_topic = match subs.get(&request.sub_id) {
+        Some(val) => val.topic.clone(),
+        None => return BrokerErrorMessage::new(BrokerErrorType::SubscriberNotRegistered, (*BROKER_UUID.lock().unwrap()).to_string()).as_message()
+    };
+
+    // Remove already read messages
+    let mut min_last_read_post: u64 = u64::MAX;
+    let posts = &mut topics.get_mut(&sub_topic).unwrap().posts; 
+    for (_, sub_data) in subs {
+        if sub_data.topic == sub_topic && sub_data.last_read_post < min_last_read_post {
+            min_last_read_post = sub_data.last_read_post;
+        }
+    }
+
+    let mut keys_to_remove: HashSet<String> = HashSet::new();
+    for (post_no, _) in posts.iter() {
+        if post_no.parse::<u64>().unwrap() <= min_last_read_post {
+            keys_to_remove.insert(post_no.clone());
+        }
+    }
+    posts.retain(|k, _| !keys_to_remove.contains(k));
+    println!("Topics data structure after acknowledged get: {:?}", topics);
 
     AckReply::new(request.sub_id.clone(), request.message_no.clone()).as_message()
 }
@@ -275,6 +283,8 @@ fn handle_requests(socket: &zmq::Socket) {
     let req_bytes: Vec<u8> = socket.recv_bytes(0).unwrap();
     let req_message: Message = bson::from_slice(req_bytes.as_slice()).unwrap();
 
+    println!("Received new request: {}", req_message.req_type);
+    dbg!(&mut *SUBS.lock().unwrap());
     let rep_message = match req_message.req_type.as_str() {
         GET_REQ_HEAD => handle_get(bson::from_bson(req_message.payload).unwrap()),
         GET_ACK_HEAD => handle_get_ack(bson::from_bson(req_message.payload).unwrap()),

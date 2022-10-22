@@ -7,7 +7,6 @@ const SUB_STORAGE_PATH: &str = "./data/sub/";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SubscriberContext {
-    #[serde(skip)]
     pub sub_id: String,
     pub topic: String,
     pub known_broker_id: Option<String>,
@@ -49,6 +48,10 @@ impl SubscriberContext {
     pub fn create_unsubscribe_request(&self) -> unsubscribe::Request {
         unsubscribe::Request::new(self.sub_id.clone())
     }
+
+    pub fn from_file(id: &String) -> Result<SubscriberContext, ContextIOError> {
+        read(format!("{}{}.bson", Self::build_prefix(), id))
+    }
 }
 
 impl FileWritable<SubscriberContext> for SubscriberContext {
@@ -58,10 +61,6 @@ impl FileWritable<SubscriberContext> for SubscriberContext {
 
     fn build_path(&self) -> String {
         return format!("{}{}.bson", SUB_STORAGE_PATH, self.sub_id);
-    }
-
-    fn from_file(id: &String) -> Result<SubscriberContext, ContextIOError> {
-        read(format!("{}{}.bson", Self::build_prefix(), id))
     }
     
     fn build_prefix() -> &'static str {

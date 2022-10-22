@@ -3,6 +3,7 @@ use std::process;
 
 mod subscriber;
 mod publisher;
+mod slow_subscriber_scenario;
 
 pub const USAGE_MESSAGE: &str = "USAGE:\ncargo run <service> <service_number> \nservice: name of the service to run. Can be one of subscribe or publisher\n
 service_number: number of the function to be executed.";
@@ -35,6 +36,12 @@ fn main() {
                 _ => panic!("Function publisher{} does not exist", service_number)
             }
         },
+        "scenario" => { 
+            match service_number {
+                1 => slow_subscriber_scenario::run(),
+                _ => panic!("Function sccenario {} does not exist", service_number)
+            }
+        }
         _ => panic!("Unknown service string {}", service)
     }
 }
