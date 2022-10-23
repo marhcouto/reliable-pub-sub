@@ -43,11 +43,8 @@ impl SubscriberData {
         self.last_read_post
     }
 
-    fn change_status(&mut self) {
-        match self.status {
-            SubscriberStatus::WaitingAck => self.status = SubscriberStatus::WaitingGet,
-            SubscriberStatus::WaitingGet => self.status = SubscriberStatus::WaitingAck
-        }
+    fn change_status(&mut self, status: SubscriberStatus) {
+        self.status = status;
     }
 }
 
@@ -128,19 +125,24 @@ fn handle_get(state: &mut BrokerState, request: GetRequest) -> Message {
     let post_payload: Vec<u8>;
     let post_no: u64;
 
+    // Subscriber does not exist
     if !state.subs.contains_key(&request.sub_id) {
         return BrokerErrorMessage::new(BrokerErrorType::SubscriberNotRegistered, state.broker_uuid.clone()).as_message();
     }
 
     {
+        // Subscriber is not subbed to that topic
         let subscriber_data = state.subs.get_mut(&request.sub_id).unwrap(); 
         if subscriber_data.topic != request.topic {
             return BrokerErrorMessage::new(BrokerErrorType::TopicMismatch, state.broker_uuid.clone()).as_message();
         }
+
+        // The topic does not exist
         if !state.topics.contains_key(&request.topic) {
             return BrokerErrorMessage::new(BrokerErrorType::InhexistantTopic, state.broker_uuid.clone()).as_message();
         }
 
+        // There are not posts in that topic for this reader
         post_no = subscriber_data.last_read_post + 1;
         match state.topics.get(&request.topic).unwrap().posts.get(&post_no.to_string()) {
             Some(payload) => post_payload = payload.clone(),
@@ -148,7 +150,7 @@ fn handle_get(state: &mut BrokerState, request: GetRequest) -> Message {
         }
     
         // Change status to waiting for ACK
-        subscriber_data.change_status();
+        subscriber_data.change_status(SubscriberStatus::WaitingAck);
     }
 
     GetReply::new(
@@ -160,9 +162,13 @@ fn handle_get(state: &mut BrokerState, request: GetRequest) -> Message {
 }
 
 fn handle_put(state: &mut BrokerState, request: PutRequest) -> Message {
+
+    // Repeated message
     if state.received_uuids.contains(&request.message_uuid) {
         return BrokerErrorMessage::new(BrokerErrorType::DuplicateMessage, state.broker_uuid.clone()).as_message();
     }
+
+    // Inexistant topic
     if !state.topics.contains_key(&request.topic)  {
         return BrokerErrorMessage::new(BrokerErrorType::InhexistantTopic, state.broker_uuid.clone()).as_message();
     }
@@ -189,6 +195,8 @@ fn handle_sub(state: &mut BrokerState, request: SubRequest) -> Message {
     }
     state.subs.insert(request.sub_id.clone(), SubscriberData::new(request.topic.clone(), subs_last_read_post_no));
 
+    println!("Known subs: {:?}", state.subs.keys());
+
     SubReply::new(request.sub_id.clone(), request.topic.clone(), state.broker_uuid.clone(), subs_last_read_post_no + 1).as_message()
 }
 
@@ -199,30 +207,36 @@ fn handle_unsub(state: &mut BrokerState, request: UnsubRequest) -> Message {
     }
     state.subs.remove(&request.sub_id);
     
+    println!("Known subs: {:?}", state.subs.keys());
+
     UnsubReply::new(request.sub_id.clone(), state.broker_uuid.clone()).as_message()
 }
 
 fn handle_get_ack(state: &mut BrokerState, request: AckRequest) -> Message {
-    if !state.subs.contains_key(&request.sub_id) {
-        return BrokerErrorMessage::new(BrokerErrorType::SubscriberNotRegistered, state.broker_uuid.clone()).as_message();
-    }
-    let subscriber_data: &mut SubscriberData = state.subs.get_mut(&request.sub_id).unwrap(); 
 
-    if (subscriber_data.last_read_post + 1) != request.message_no {
-        return BrokerErrorMessage::new(BrokerErrorType::AckMessageMismatch, state.broker_uuid.clone()).as_message();
-    }
-
-    subscriber_data.increment_last_read();
-    subscriber_data.change_status();
-
-    let sub_topic = match state.subs.get(&request.sub_id) {
-        Some(val) => val.topic.clone(),
+    // Subscriber does not exist
+    let subscriber_data: &mut SubscriberData = match state.subs.get_mut(&request.sub_id) {
+        Some(val) => val,
         None => return BrokerErrorMessage::new(BrokerErrorType::SubscriberNotRegistered, state.broker_uuid.clone()).as_message()
     };
 
+    // Not expecting Ack
+    match subscriber_data.status {
+        SubscriberStatus::WaitingGet => return BrokerErrorMessage::new(BrokerErrorType::NotExpectingAck, state.broker_uuid.clone()).as_message(),
+        SubscriberStatus::WaitingAck => subscriber_data.change_status(SubscriberStatus::WaitingGet)
+    }
+
+    // Check message number
+    if (subscriber_data.last_read_post + 1) != request.message_no {
+        return BrokerErrorMessage::new(BrokerErrorType::AckMessageMismatch, state.broker_uuid.clone()).as_message();
+    }
+    subscriber_data.increment_last_read();
+
+    let sub_topic: String = subscriber_data.topic.clone();
+
     // Remove already read messages
     let mut min_last_read_post: u64 = u64::MAX;
-    let posts = &mut state.topics.get_mut(&sub_topic).unwrap().posts; 
+    let posts = &mut state.topics.get_mut(&sub_topic).unwrap().posts;
     for (_, sub_data) in state.subs.iter() {
         if sub_data.topic == sub_topic && sub_data.last_read_post < min_last_read_post {
             min_last_read_post = sub_data.last_read_post;
@@ -251,16 +265,8 @@ fn handle_requests(socket: &zmq::Socket, state: &mut BrokerState) {
         GET_REQ_HEAD => handle_get(state, bson::from_bson(req_message.payload).unwrap()),
         GET_ACK_HEAD => handle_get_ack(state, bson::from_bson(req_message.payload).unwrap()),
         PUT_REQ_HEAD => handle_put(state, bson::from_bson(req_message.payload).unwrap()),
-        SUB_REQ_HEAD => {
-            let message = handle_sub(state, bson::from_bson(req_message.payload).unwrap());
-            println!("Known subs: {:?}", state.subs.keys());
-            message
-        }
-        UNSUB_REQ_HEAD => {
-            let message = handle_unsub(state, bson::from_bson(req_message.payload).unwrap());
-            println!("Known subs: {:?}", state.subs.keys());
-            message
-        }
+        SUB_REQ_HEAD => handle_sub(state, bson::from_bson(req_message.payload).unwrap()),
+        UNSUB_REQ_HEAD => handle_unsub(state, bson::from_bson(req_message.payload).unwrap()),
         _ => BrokerErrorMessage::new(BrokerErrorType::UnknownMessage, state.broker_uuid.clone()).as_message()
     };
 

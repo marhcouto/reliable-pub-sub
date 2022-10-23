@@ -1,15 +1,16 @@
-use meic_mq::{context::{publisher::PublisherContext, subscriber::SubscriberContext}, put, get, unsubscribe, subscribe};
+use meic_mq::{context::{publisher::PublisherContext, subscriber::SubscriberContext}, put, get, subscribe};
 use std::{thread, time};
 
 pub fn run_publisher_biology() {
-    let mut publisher_biology: PublisherContext = PublisherContext::new(String::from("BiologyPub"));
+    let publisher_biology: PublisherContext = PublisherContext::new(String::from("BiologyPub"));
     let mut message_counter = 0;
     let delay = time::Duration::from_millis(500);
     loop {
         let message = publisher_biology.create_put_request("biology".to_owned(), format!("Biology Message: {}", message_counter).into_bytes());
-        if let Err(err) = put(&mut publisher_biology, &message) {
+        if let Err(err) = put(&message) {
             println!("{}", err)
         } else {
+            println!("Message published");
             message_counter += 1;
         }
         thread::sleep(delay);
@@ -17,14 +18,15 @@ pub fn run_publisher_biology() {
 }
 
 pub fn run_publisher_cars() {
-    let mut publisher_cars: PublisherContext = PublisherContext::new(String::from("CarsPub"));
+    let publisher_cars: PublisherContext = PublisherContext::new(String::from("CarsPub"));
     let mut message_counter = 0;
     let delay = time::Duration::from_millis(500);
     loop {
         let message = publisher_cars.create_put_request("cars".to_owned(), format!("Cars Message: {}", message_counter).into_bytes());
-        if let Err(err) = put(&mut publisher_cars, &message) {
+        if let Err(err) = put(&message) {
             println!("{}", err)
         } else {
+            println!("Message published");
             message_counter += 1;
         }
         thread::sleep(delay);

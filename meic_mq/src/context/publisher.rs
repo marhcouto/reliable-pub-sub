@@ -19,10 +19,6 @@ impl PublisherContext {
         }
     }
 
-    pub fn reset_context(&mut self) {
-        self.known_broker_id = None;
-    }
-
     pub fn read(pub_id: String) -> Result<PublisherContext, ContextIOError> {
         let path: String = format!("{}{}", PUB_STORAGE_PATH, pub_id);
         let mut pub_ctx: PublisherContext = match super::read(path) {

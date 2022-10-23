@@ -13,7 +13,8 @@ pub enum BrokerErrorType {
     TopicMismatch,
     AckMessageMismatch,
     UnknownMessage,
-    NoPostsInTopic
+    NoPostsInTopic,
+    NotExpectingAck
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -41,7 +42,9 @@ impl BrokerErrorMessage {
             BrokerErrorType::UnknownMessage => BrokerErrorMessage {error_type, broker_id, 
                 description: format!("Couldn't recognize the type of your message") },
             BrokerErrorType::NoPostsInTopic => BrokerErrorMessage {error_type, broker_id, 
-                description: format!("There are still no posts in that topic") }
+                description: format!("There are still no posts in that topic") },
+            BrokerErrorType::NotExpectingAck => BrokerErrorMessage {error_type, broker_id,
+                description: format!("The broker was not expecting an ACK message") }
         }
     }
 
@@ -51,13 +54,13 @@ impl BrokerErrorMessage {
 impl NetworkTradeable<BrokerErrorMessage> for BrokerErrorMessage {
     fn as_message(&self) -> Message {
         Message {
-            req_type: REQUEST_HEADER.to_string(),
+            msg_type: REQUEST_HEADER.to_string(),
             payload: bson::to_bson(self).unwrap()
         }
     }
 
     fn from_message(message: Message) -> Result<BrokerErrorMessage, DeserializationErrors> {
-        if message.req_type != REQUEST_HEADER {
+        if message.msg_type != REQUEST_HEADER {
             return Err(DeserializationErrors::IncompatibleMessageType);
         }
         match bson::from_bson(message.payload) {

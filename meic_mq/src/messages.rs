@@ -8,14 +8,14 @@ pub enum DeserializationErrors {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Message {
-    pub req_type: String,
+    pub msg_type: String,
     pub payload: Bson
 }
 
 impl Message {
     fn new(req_type: String, payload: Bson) -> Message {
         Message {
-            req_type: req_type,
+            msg_type: req_type,
             payload: payload
         }
     }

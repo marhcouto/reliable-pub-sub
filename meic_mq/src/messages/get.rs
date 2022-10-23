@@ -51,10 +51,6 @@ impl Reply {
             payload
         }
     }
-
-    pub fn match_request(&self, request: &Request) -> bool {
-        self.sub_id == request.sub_id
-    }
 }
 
 impl Ack {
@@ -81,7 +77,7 @@ impl NetworkTradeable<Request> for Request {
     }
 
     fn from_message(message: Message) -> Result<Request, DeserializationErrors> {
-        if message.req_type != REQUEST_HEADER {
+        if message.msg_type != REQUEST_HEADER {
             return Err(DeserializationErrors::IncompatibleMessageType);
         }
         match bson::from_bson(message.payload) {
@@ -97,7 +93,7 @@ impl NetworkTradeable<Reply> for Reply {
     }
 
     fn from_message(message: Message) -> Result<Reply, DeserializationErrors> {
-        if message.req_type != REPLY_HEADER {
+        if message.msg_type != REPLY_HEADER {
             return Err(DeserializationErrors::IncompatibleMessageType);
         }
         match bson::from_bson(message.payload) {
@@ -113,7 +109,7 @@ impl NetworkTradeable<Ack> for Ack {
     }
 
     fn from_message(message: Message) -> Result<Ack, DeserializationErrors> {
-        if message.req_type != ACK_HEADER {
+        if message.msg_type != ACK_HEADER {
             return Err(DeserializationErrors::IncompatibleMessageType);
         }
         match bson::from_bson(message.payload) {
@@ -129,7 +125,7 @@ impl NetworkTradeable<AckReply> for AckReply {
     }
 
     fn from_message(message: Message) -> Result<AckReply, DeserializationErrors> {
-        if message.req_type != ACK_REPLY_HEADER {
+        if message.msg_type != ACK_REPLY_HEADER {
             return Err(DeserializationErrors::IncompatibleMessageType);
         }
         match bson::from_bson(message.payload) {

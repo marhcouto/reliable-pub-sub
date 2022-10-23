@@ -1,7 +1,7 @@
 use meic_mq::{context::{publisher::PublisherContext, subscriber::SubscriberContext}, get, subscribe, put, unsubscribe};
 
 pub fn run() {
-    let mut publisher_tech: PublisherContext = PublisherContext::new(String::from("tech"));
+    let publisher_tech: PublisherContext = PublisherContext::new(String::from("tech"));
 
     let mut fast_sub: SubscriberContext = SubscriberContext::new(String::from("FastSub"), String::from("tech"));
     let fast_sub_req = fast_sub.create_subscribe_request();
@@ -14,7 +14,7 @@ pub fn run() {
     for i in 0..5 {
         let payload: String = format!("Hello this is payload number {}", i);
         let put_req = publisher_tech.create_put_request("tech".to_owned(), payload.into_bytes());
-        put(&mut publisher_tech, &put_req).unwrap();
+        put(&put_req).unwrap();
     }
 
     println!("This is the fast sub reading");

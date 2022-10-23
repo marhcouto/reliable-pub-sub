@@ -25,7 +25,7 @@ impl NetworkTradeable<Request> for Request {
     }
 
     fn from_message(message: Message) -> Result<Request, DeserializationErrors> {
-        if message.req_type != REQUEST_HEADER {
+        if message.msg_type != REQUEST_HEADER {
             return Err(DeserializationErrors::IncompatibleMessageType);
         }
         match bson::from_bson(message.payload) {
@@ -52,17 +52,6 @@ impl Reply {
             post_offset: post_offset
         }
     }
-
-    pub fn match_request(&self, request: &Request) -> bool {
-        if self.topic != request.topic {
-            return false;
-        }
-        if self.sub_id != request.sub_id {
-            return false;
-        }
-
-        return true;
-    }
 }
 
 impl NetworkTradeable<Reply> for Reply {
@@ -71,7 +60,7 @@ impl NetworkTradeable<Reply> for Reply {
     }
 
     fn from_message(message: Message) -> Result<Reply, DeserializationErrors> {
-        if message.req_type != REPLY_HEADER {
+        if message.msg_type != REPLY_HEADER {
             return Err(DeserializationErrors::IncompatibleMessageType);
         }
         match bson::from_bson(message.payload) {

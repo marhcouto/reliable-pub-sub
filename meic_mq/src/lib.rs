@@ -23,28 +23,36 @@ fn _get(socket: &zmq::Socket, sub_ctx: &mut SubscriberContext, request: &get::Re
     socket.send(request.as_message().to_bytes().unwrap(), 0).unwrap();
     let repl_bytes: Vec<u8> = socket.recv_bytes(0).unwrap();
     let repl_message: Message = bson::from_slice(repl_bytes.as_slice()).unwrap();
-    if repl_message.req_type == error::REQUEST_HEADER {
+
+    // Error Message
+    if repl_message.msg_type == error::REQUEST_HEADER {
         let error_struct: error::BrokerErrorMessage = bson::from_bson(repl_message.payload).unwrap();
         match &sub_ctx.known_broker_id {
             Some(val) => {
                 if *val != error_struct.broker_id {
-                    return Err("The broker has wiped out its data, need to subscribe again".to_string())
+                    return Err("The broker has wiped out its data, need to subscribe again".to_owned())
                 }
             },
             _ => {},
         }
+        match error_struct.error_type {
+            error::BrokerErrorType::InhexistantTopic => panic!("Inexistant topic in get reply"),
+            _ => {}
+        }
         return Err(error_struct.description);
     }
 
-    if repl_message.req_type != get::REPLY_HEADER {
-        return Err(format!("Unexpected message type '{}' expecting '{}'", repl_message.req_type, put::REPLY_HEADER));
+    // Unexpected Message Type
+    if repl_message.msg_type != get::REPLY_HEADER {
+        panic!("Unexpected message type '{}' expecting '{}'", repl_message.msg_type, put::REPLY_HEADER);
     }
 
+    // New broker
     let repl: get::Reply = bson::from_bson(repl_message.payload).unwrap();
     match &sub_ctx.known_broker_id {
         Some(known_broker_id) => {
             if known_broker_id != &repl.broker_id {
-                return Err("NEW_BROKER".to_owned());
+                return Err("The broker has wiped out its data, need to subscribe again".to_owned());
             }
         } 
         None => {
@@ -52,11 +60,7 @@ fn _get(socket: &zmq::Socket, sub_ctx: &mut SubscriberContext, request: &get::Re
         }
     }
 
-    // Probably Useless - checks if user_id is correct
-    if !repl.match_request(&request) {
-        return Err("Unexpected reply for get request".to_string());
-    }
-
+    // Acknowledgement
     let ack: get::Ack = get::Ack {
         sub_id: repl.sub_id,
         message_no: repl.message_no
@@ -66,57 +70,64 @@ fn _get(socket: &zmq::Socket, sub_ctx: &mut SubscriberContext, request: &get::Re
     let ack_repl_bytes: Vec<u8> = socket.recv_bytes(0).unwrap();
     let ack_repl_message: Message = bson::from_slice(&ack_repl_bytes.as_slice()).unwrap();
 
-    if ack_repl_message.req_type == error::REQUEST_HEADER {
+    // Error message
+    if ack_repl_message.msg_type == error::REQUEST_HEADER {
         let error_struct: error::BrokerErrorMessage = bson::from_bson(ack_repl_message.payload).unwrap();
+        match &sub_ctx.known_broker_id {
+            Some(val) => {
+                if *val != error_struct.broker_id {
+                    return Err("The broker has wiped out its data, need to subscribe again".to_owned())
+                }
+            },
+            _ => {},
+        }
+        match error_struct.error_type {
+            error::BrokerErrorType::SubscriberNotRegistered => panic!("Subscriber not registered in ack reply"),
+            error::BrokerErrorType::AckMessageMismatch => panic!("Ack message mismatch: ack message is not on the same message number"),
+            error::BrokerErrorType::NotExpectingAck => panic!("Broker was not expecting ack message"),
+            _ => {}
+        }
         return Err(error_struct.description);
     }
 
-    if ack_repl_message.req_type != get::ACK_REPLY_HEADER {
-        return Err(format!("Unexpected message type '{}' expecting '{}'", repl_message.req_type, get::ACK_REPLY_HEADER));
+    // Unexpected Message Type
+    if ack_repl_message.msg_type != get::ACK_REPLY_HEADER {
+        panic!("Unexpected message type '{}' expecting '{}'", repl_message.msg_type, get::ACK_REPLY_HEADER);
     }
 
-    if sub_ctx.next_post_no != repl.message_no {
+    // If the message received was not the desired one
+    if sub_ctx.next_post_no > repl.message_no {
         return _get(socket, sub_ctx, request);
+    } else if sub_ctx.next_post_no < repl.message_no {
+        panic!("Message number is higher than the one expected to receive");
     }
 
     sub_ctx.increment_next_post_no();
     Ok(repl.payload)
 }
 
-pub fn put(pub_ctx: &mut PublisherContext, request: &put::Request) -> Result<(), String> {
+pub fn put(request: &put::Request) -> Result<(), String> {
     let socket: &zmq::Socket = &SOCKET.lock().unwrap();
     assert!(socket.connect("tcp://localhost:5555").is_ok());
 
-    _put(&socket, pub_ctx, request)
+    _put(&socket, request)
 }
 
-fn _put(socket: &zmq::Socket, pub_ctx: &mut PublisherContext, request: &put::Request) -> Result<(), String> {
+fn _put(socket: &zmq::Socket, request: &put::Request) -> Result<(), String> {
     socket.send(request.as_message().to_bytes().unwrap(), 0).unwrap();
     let repl_bytes = socket.recv_bytes(0).unwrap();
-
     let repl_message: Message = bson::from_slice(repl_bytes.as_slice()).unwrap();
-    if repl_message.req_type == error::REQUEST_HEADER {
+
+    // Error message
+    if repl_message.msg_type == error::REQUEST_HEADER {
         let error_struct: error::BrokerErrorMessage = bson::from_bson(repl_message.payload).unwrap();
         return Err(error_struct.description);
     }
-    if repl_message.req_type != put::REPLY_HEADER {
-        return Err(format!("Unexpected message type '{}' expecting '{}'", repl_message.req_type, put::REPLY_HEADER));
+
+    // Unexpected message type
+    if repl_message.msg_type != put::REPLY_HEADER {
+        panic!("Unexpected message type '{}' expecting '{}'", repl_message.msg_type, put::REPLY_HEADER);
     } 
-
-    let repl: put::Reply = bson::from_bson(repl_message.payload).unwrap(); 
-    match &pub_ctx.known_broker_id {
-        Some(known_broker_id) => {
-            if known_broker_id != &repl.broker_id {
-                pub_ctx.reset_context();
-                return _put(socket, pub_ctx, request);
-            }
-        }
-        None => pub_ctx.known_broker_id = Some(repl.broker_id.clone())
-    }
-
-    if !repl.match_request(&request) {
-        return Err("Unexpected reply for request".to_string());
-    }
     
     Ok(())
 }
@@ -133,20 +144,18 @@ fn _subscribe(socket: &zmq::Socket, sub_ctx: &mut SubscriberContext, request: &s
     let repl_bytes = socket.recv_bytes(0).unwrap();
     let repl_msg: Message = bson::from_slice(repl_bytes.as_slice()).unwrap();
 
-    if repl_msg.req_type == error::REQUEST_HEADER {
+    // Error message
+    if repl_msg.msg_type == error::REQUEST_HEADER {
         let error_struct: error::BrokerErrorMessage = bson::from_bson(repl_msg.payload).unwrap();
         return Err(error_struct.description);
     }
 
-    if repl_msg.req_type != subscribe::REPLY_HEADER {
-        return Err(format!("Unexpected message type '{}' expecting '{}'", repl_msg.req_type, subscribe::REPLY_HEADER));
+    // Unexpected message type
+    if repl_msg.msg_type != subscribe::REPLY_HEADER {
+        panic!("Unexpected message type '{}' expecting '{}'", repl_msg.msg_type, subscribe::REPLY_HEADER);
     }
 
     let repl: subscribe::Reply = bson::from_bson(repl_msg.payload).unwrap();
-
-    if !repl.match_request(&request) {
-        return Err("Unexpected reply for subscribe request".to_string());
-    }
 
     sub_ctx.known_broker_id = Some(repl.broker_id);
     sub_ctx.next_post_no = repl.post_offset;
@@ -166,7 +175,8 @@ fn _unsubscribe(socket: &zmq::Socket, sub_ctx: &mut SubscriberContext, request: 
     let repl_bytes: Vec<u8> = socket.recv_bytes(0).unwrap();
     let repl_msg: Message = bson::from_slice(repl_bytes.as_slice()).unwrap();
 
-    if repl_msg.req_type == error::REQUEST_HEADER {
+    // Error message
+    if repl_msg.msg_type == error::REQUEST_HEADER {
         let error_struct: error::BrokerErrorMessage = bson::from_bson(repl_msg.payload).unwrap();
         match error_struct.error_type {
             error::BrokerErrorType::SubscriberNotRegistered => return Ok(()),
@@ -174,14 +184,9 @@ fn _unsubscribe(socket: &zmq::Socket, sub_ctx: &mut SubscriberContext, request: 
         }
     }
 
-    if repl_msg.req_type != unsubscribe::REPLY_HEADER {
-        return Err(format!("Unexpected message type '{}' expecting '{}'", repl_msg.req_type, unsubscribe::REPLY_HEADER));
-    }
-
-    let repl: unsubscribe::Reply = bson::from_bson(repl_msg.payload).unwrap();
-
-    if !repl.match_request(&request) {
-        return Err("Unexpected reply for unsubscribe request".to_string());
+    // Unexpected message type
+    if repl_msg.msg_type != unsubscribe::REPLY_HEADER {
+        panic!("Unexpected message type '{}' expecting '{}'", repl_msg.msg_type, unsubscribe::REPLY_HEADER);
     }
 
     sub_ctx.known_broker_id = None;
