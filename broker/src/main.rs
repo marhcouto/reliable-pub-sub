@@ -260,8 +260,8 @@ fn handle_requests(socket: &zmq::Socket, state: &mut BrokerState) {
     let req_bytes: Vec<u8> = socket.recv_bytes(0).unwrap();
     let req_message: Message = bson::from_slice(req_bytes.as_slice()).unwrap();
 
-    println!("Received new request: {}", req_message.req_type);
-    let rep_message = match req_message.req_type.as_str() {
+    println!("Received new request: {}", req_message.msg_type);
+    let rep_message = match req_message.msg_type.as_str() {
         GET_REQ_HEAD => handle_get(state, bson::from_bson(req_message.payload).unwrap()),
         GET_ACK_HEAD => handle_get_ack(state, bson::from_bson(req_message.payload).unwrap()),
         PUT_REQ_HEAD => handle_put(state, bson::from_bson(req_message.payload).unwrap()),
