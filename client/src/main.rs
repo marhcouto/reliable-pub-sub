@@ -5,6 +5,7 @@ mod subscriber;
 mod publisher;
 mod slow_subscriber_scenario;
 mod late_sub_scen;
+mod concurrent;
 
 pub const USAGE_MESSAGE: &str = "USAGE:\ncargo run <service> <service_number> \nservice: name of the service to run. Can be one of subscribe or publisher\n
 service_number: number of the function to be executed.";
@@ -41,6 +42,10 @@ fn main() {
             match service_number {
                 "slow_sub" => slow_subscriber_scenario::run(),
                 "late_sub" => late_sub_scen::run(),
+                "conc_sub_cars" => concurrent::run_subscriber_cars(),
+                "conc_sub_bio" => concurrent::run_subscriber_biology(),
+                "conc_pub_cars" => concurrent::run_publisher_cars(),
+                "conc_pub_bio" => concurrent::run_publisher_biology(),
                 _ => panic!("Function scenario {} does not exist", service_number)
             }
         }
