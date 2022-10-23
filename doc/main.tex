@@ -1,0 +1,67 @@
+\documentclass[a4paper, 10pt, twocolumn]{article}
+
+\usepackage{color}
+\definecolor{engineering}{rgb}{0.549, 0.176, 0.098}
+
+\usepackage{listings}
+\usepackage{fancyhdr}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\hypersetup{
+    plainpages=false, 
+    pdfpagelayout=SinglePage,
+    bookmarksopen=false,
+    bookmarksnumbered=true,
+    breaklinks=true,
+    linktocpage,
+    colorlinks=true,
+    linkcolor=engineering,
+    urlcolor=engineering,
+    filecolor=engineering,
+    citecolor=engineering,
+    allcolors=engineering
+}
+
+\usepackage[
+backend=biber,
+style=chem-acs,
+]{biblatex} 
+\addbibresource{references.bib}
+\setlength{\columnsep}{10mm}
+
+\date{October, 2022}
+
+\begin{document}
+
+
+
+ % Do not change the following line
+\linespread{0.5}
+
+\title{\textbf{Reliable Publish-Subscribe Service}\\[1mm] Large Scale Distributed Systems Report}
+
+\author{Marcelo Couto$^1$   Andŕe Santos$^2$   Francisco Oliveira$^3$ Miguel Amorim$^4$\\ \\ 
+up201906086@up.pt$^1$, up201907879@up.pt$^2$, up201907361@up.pt$^3$, up201907756@up.pt$^4$ \\ \\ 
+Faculty of Engineering of the University of Porto \\ 
+Porto, Portugal}
+
+
+
+% Do not change the following three lines
+\maketitle 
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\footnotesize{Large Scale Distributed Systems Report}}
+\fancyhead[R]{\footnotesize{M. Couto, A. Santos, M. Amorim and F. Oliveira}}
+\fancyfoot[C]{\thepage}
+
+\input{abstract}
+\input{introduction}
+\input{structure}
+\input{implementation}
+\input{reliability}
+\input{conclusion}
+\input{references}
+\include{appendix}
+
+\end{document}

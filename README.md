@@ -49,7 +49,7 @@ The client can be compiled with the following command:
 cargo build
 ```
 
-The client has two test scenarios. One called slow subscriber that tries to emulate the scenario where a subscriber is behind other subscriber and the broker needs to wait for the slowest one to be able to delete messages. The second one is called late subscriber and tries to replicate the scenario where a subscriber subscribes a topic when a topic already has messages.
+The client has three test scenarios. One called slow subscriber that tries to emulate the scenario where a subscriber is behind other subscriber and the broker needs to wait for the slowest one to be able to delete messages. The second one is called late subscriber and tries to replicate the scenario where a subscriber subscribes a topic when a topic already has messages. The last one is called concurrency and tries to emulate concurent reads on multiple topics. This scenario is divided in four parts: cars publisher, biology publisher, cars subscriber and biology subscriber. Each publisher and subscriber try to send request with a 500 millisecond interval so that we can maximize concurrency between get and put requests. 
 
 ### Running the slow subscriber scenario
 
@@ -61,6 +61,28 @@ cargo run -- scenario slow_sub
 
 ```
 cargo run -- scenario late_sub
+```
+
+### Running the concurrency scenario
+
+#### Running the biology publisher
+```
+cargo run -- scenario conc_pub_bio
+```
+
+#### Running the cars publisher
+```
+cargo run -- scenario conc_pub_cars
+```
+
+#### Running the biology subscriber
+```
+cargo run -- scenario conc_sub_bio
+```
+
+#### Running the cars subscriber
+```
+cargo run -- scenario conc_sub_cars
 ```
 
 Group members:
