@@ -6,11 +6,11 @@ pub fn run_publisher_biology(pub_id: Option<&String>) {
         Some(val) => val.clone(),
         None => "BiologyPub".to_owned()
     };
-    let publisher_biology: PublisherContext = PublisherContext::new(publisher_id);
+    let publisher_biology: PublisherContext = PublisherContext::new(publisher_id.clone());
     let mut message_counter = 0;
     let delay = time::Duration::from_millis(500);
     loop {
-        let message = publisher_biology.create_put_request("biology".to_owned(), format!("Biology Message: {}", message_counter).into_bytes());
+        let message = publisher_biology.create_put_request("biology".to_owned(), format!("Biology Message from {}: {}", &publisher_id, message_counter).into_bytes());
         if let Err(err) = put(&message) {
             println!("{}", err)
         } else {
@@ -26,11 +26,11 @@ pub fn run_publisher_cars(pub_id: Option<&String>) {
         Some(val) => val.clone(),
         None => "CarsPub".to_owned()
     };
-    let publisher_cars: PublisherContext = PublisherContext::new(publisher_id);
+    let publisher_cars: PublisherContext = PublisherContext::new(publisher_id.clone());
     let mut message_counter = 0;
     let delay = time::Duration::from_millis(500);
     loop {
-        let message = publisher_cars.create_put_request("cars".to_owned(), format!("Cars Message: {}", message_counter).into_bytes());
+        let message = publisher_cars.create_put_request("cars".to_owned(), format!("Cars Message from {}: {}", &publisher_id, message_counter).into_bytes());
         if let Err(err) = put(&message) {
             println!("{}", err)
         } else {
