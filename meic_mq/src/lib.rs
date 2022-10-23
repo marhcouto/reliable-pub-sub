@@ -1,4 +1,4 @@
-use context::{ publisher::PublisherContext, subscriber::SubscriberContext };
+use context::{ subscriber::SubscriberContext };
 use messages::{ put, get, NetworkTradeable, Message, error, subscribe, unsubscribe };
 
 use lazy_static::lazy_static;
