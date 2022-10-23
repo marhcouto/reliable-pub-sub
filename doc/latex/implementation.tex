@@ -4,12 +4,22 @@
 \subsection{ZeroMQ Messaging Pattern}
 Even though \emph{libzmq} has a Publisher-Subscriber pattern available, we decided to use Request-Reply pattern for the following reason: the \emph{ZeroMQ} pub-sub pattern does not allow for replies on a get or put request and does not allow for the control of the message queues, which would make it impossible for us to control the exactly once factor. The reason for this is that the pub-sub pattern does not guarantee the arrival of the messages in certain scenarios, such as, quoting the documentation, "when a network failure occurs, or just if the subscriber or network can’t keep up with the publisher"\cite[Chapter~5]{zeromqguide}. This choice, of course, meant more implementation work, but it was a necessary sacrifice.
 
-\subsection{Message Structure}
+
+\subsection{Messages} 
+
+All the four functions execute similar actions:
+
+\begin{enumerate}
+    \item Send the request
+    \item Receive the reply
+    \item Analyze the reply and take action accordingly
+\end{enumerate}
+
 All messages are sent in the form of a serialized \emph{Rust struct} - \textbf{Message}. This serialization step is done using a library called \emph{Bson}\footnote{\url{https://docs.rs/bson/latest/bson/}}. 
 
 \begin{lstlisting}
 struct Message {
-    message_type: String,
+    msg_type: String,
     payload: Bson
 }
 \end{lstlisting}
@@ -30,8 +40,11 @@ pub struct Reply {
     pub payload: Vec<u8>,
 }
 \end{lstlisting}
-As we can see, the request is composed by a sub id and a topic, meaning the subscriber's id and the topic that he is subscribed to.
-The reply is composed also with the sub id, with a message number, that identifies the message, the broker's id and the payload.\par
+
+The reply message contains the message number so that a confirmation on the correct order of messages can be performed inside the library's functions.
+
+The broker id exists solely to inform the user that the broker could not recover its state in a crash.
+
 Furthermore, on this requests we have also acknowledge requests and replies.
 \begin{lstlisting}
 pub struct Ack {
@@ -43,7 +56,9 @@ pub struct AckReply {
     pub message_no: u64
 }
 \end{lstlisting}
-As we can see above, the requests and the replies are composed by a sub id and a message's number.
+The goal of the \emph{Ack} message is to guarantee that a given subscriber does not miss a message for a network failure, as will be described in the \ref{sec:Reliability} section. The \emph{AckReply} only exists due to the obligation of the broker to reply to a request per ZeroMQ Req-Rep pattern.
+
+
 \subsubsection{Put}
 
 \begin{lstlisting}
@@ -59,7 +74,9 @@ pub struct Reply {
     pub broker_id: String
 }
 \end{lstlisting}
-A Put request is composed by a pub's id, meaning the publisher's id, the topic, a message's uuid, that identifies the message and the payload of the message. Meanwhile, a reply is composed by a message's uuid, the topic and broker's id.
+The message uuid is used to ensure a given message is not sent twice to the broker. This mechanism will be better explained in the \ref{sec:Reliability} section.
+
+
 \subsubsection{Subscribe}
 
 \begin{lstlisting}
@@ -75,7 +92,7 @@ pub struct Reply {
 }
     
 \end{lstlisting}
-As listed above, a subscribe request is composed by the sub's id and the topic that he wants to subscribe to. A subscribe reply is composed by also the sub's id and the topic, and the broker's id and a post offset.
+The post\_offset represents the current post counter on the topic the subscriber subscribed.
 \subsubsection{Unsubscribe}
 
 \begin{lstlisting}
@@ -87,7 +104,50 @@ pub struct Reply {
     pub broker_id: String
 }
 \end{lstlisting}
-As we can see above, the structure of an unsubscribe request is the sub's id. As about the reply, it is composed by the sub's id and the broker's id.
+
+\subsubsection{Error}
+
+\begin{lstlisting}
+enum BrokerErrorType {
+    SubscriberNotRegistered,
+    SubscriberAlreadyRegistered,
+    InhexistantTopic,
+    DuplicateMessage,
+    TopicMismatch,
+    AckMessageMismatch,
+    UnknownMessage,
+    NoPostsInTopic,
+    NotExpectingAck
+}
+
+struct BrokerErrorMessage {
+    error_type: BrokerErrorType,
+    broker_id: String,
+    description: String
+}
+\end{lstlisting}
+The error message is used for when the request made to the broker has generated any problem. These errors can be both internal errors, which will be treated by the library functions, or user errors. In the latter case, the error messages are returned to the user directly through the return value of the library's functions.
+
+\subsection{Publisher and Subscriber Contexts}
+
+In order to make the state of a user well defined, we created two structs that holds such data for each type of user (Subscribers and Publishers):
+
+\begin{lstlisting}
+struct PublisherContext {
+    pub_id: String,
+    known_broker_id: Option<String>,
+}
+
+struct SubscriberContext {
+    sub_id: String,
+    topic: String,
+    known_broker_id: Option<String>,
+    next_post_no: u64
+}
+\end{lstlisting}
+
+While the \emph{SubscriberContext} subscriber id and the number of the next post should be saved in the same structure and were the primary motivation for these, the rest of the data is merely to improve user experience and allow for a similar interface for each of the cases, subscriber or publisher.
+
 
 \subsection{Broker}
 
@@ -135,48 +195,5 @@ The usage of \emph{hashmaps} and \emph{hashsets} is justified by the temporal ef
     \item You can check if a UUID already exists in the \emph{hashset} in constant time
 \end{itemize}
 
-The processing of the incoming requests is done in a simple manner, as depicted in diagram... %TODO
+The processing of the incoming requests is done in a simple manner, as depicted in Fig. \ref{fig:activity-diagram}.
 
-% diagram that I (Marcelo) am going TODO
-
-
-
-\subsection{Publisher and Subscriber Contexts}
-
-In order to make the state of a user well defined, we created two structs that holds such data for each type of user (Subscribers and Publishers):
-
-\begin{lstlisting}
-struct PublisherContext {
-    pub_id: String,
-    known_broker_id: Option<String>,
-}
-
-struct SubscriberContext {
-    sub_id: String,
-    topic: String,
-    known_broker_id: Option<String>,
-    next_post_no: u64
-}
-\end{lstlisting}
-
-\begin{itemize}
-    \item Each of them have an \textbf{ID}. The subscriber needs an ID in order to subscribe a topic. However, both subscriber and publisher require a string ID so that the data can persist the lifetime of the client program if needed. 
-    \item Both structs contain a field alluding to the \textbf{broker ID}, for the case that the broker may have gone down and all the save data was eliminated
-    \item The subscriber only subscribes a topic, hence this information is also useful
-    \item The subscriber context needs to hold the number of the post it is expecting to receive, so as to ensure exactly-once message delivery.
-\end{itemize}
-
-
-
-
-
-
-
-
-\subsection{Persistence of Data in Files}
-
-In order to insure the persistence of data in the event that something crashes or fails, the usage of files is essential so we can recover and bring the broker up in the same conditions as the previous state.
-Because of that, the solution was storing the 3 main data structures previously mentioned in 3 separate files. This process was executed using thread pools, so that the process stale time would be reduced and the effort split. The chosen time between backups was 5 seconds, which is a balanced option, since it isn't a short interval but isn't a huge gap either, finding a middle between performance and reliability. Every time the broker connection is raised, it tries to recover a possible previous state. In the absence of any files, it assumes that no information was stored so it starts from zero.
-
-\subsection{Error Handling}
-An efficient error handling method needs to evaluate swiftly if any failures occurred. Therefore, the solution was to integrate the error type in the message struct, as shown in the previous section. This way, if any error happens to come up, a message is sent with the pre-defined error type as a replacement for the pretended message(the client was already waiting for a response). On the receiver side, the reader parses the struct and when it catches an error, it parses its payload so that the right error is handled. A struct containing all error types and own solutions is defined.

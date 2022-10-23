@@ -1,0 +1,62 @@
+\section{Reliability and Exactly-Once Delivery}
+\label{sec:Reliability}
+
+
+To ensure our service is reliable and the posts/messages are delivered exactly-once to each subscriber (in the conditions stated in the project's summary), we had to make a multitude different choices when designing our system. The problems we addressed in order to ensure these conditions were:
+
+\begin{enumerate}
+    \item A given post was sent twice and saved duplicated in the broker
+    \item A subscriber did not receive the message sent by the broker
+    \item The broker crashes and looses its data
+\end{enumerate}
+
+\subsection{Duplicated Post}
+
+If a given put request was sent twice and no duplicate post verification was performed, the subscribers would eventually receive the same post twice, violating the exactly-once rule. Checking for similarities in the request payload was not a solution either, as some scenarios require messages with the same payload, like weather forecasts. For this reason, we came up with a system involving UUIDs (Universal Unique Identifier). With this system in practice, the exchange of messages occurs like this
+
+\begin{enumerate}
+    \item Each put request is assigned an UUID as of its creation
+    \item Upon arrival of the request on the broker, the latter checks if there is any UUID equal to the one received on the \emph{received\_uuids hashset}
+    \item In case there is, the request is rejected and an error message is sent to the publisher accordingly
+\end{enumerate}
+
+This solution proved to be quite simple and efficient, having only the down side of the necessity of storage of more data, the UUIDs.
+
+\subsection{Subscriber Not Receiving Get Reply}
+
+If a subscriber would not receive a message, there had to be a way for the broker to know and resend him the message. Our service uses post numeration and Ack messages to solve this.
+
+\begin{itemize}
+    \item The numeration is used for the confirmation of the correct order of messages on arrival to the subscriber: 
+    \begin{enumerate}
+        \item  the subscriber first receives the number of the last post that occurred before he subscribed to that topic, in order to register which was the first message this susbcriber was to receive. This information is stored both in broker (\emph{Subscriber Data} struct) and client (\emph{SubscriberContext} struct)
+        \item each time a get request is issued and the reply arrives, an ack is sent to the broker
+        \item only on the arrival of the Ack request and only if the broker is waiting for it (\emph{SubscriberData.status}) will the Broker acknowledge that the subscriber received the post and raise the value for the post counter for that subscriber.
+        \item only after this process does the subscriber check if the number of the message is correct. If the number is lower than expected, the subscriber keeps issuing get requests until it is satisfied.
+    \end{enumerate}
+\end{itemize}
+
+This implementation of the get obviously decreases the efficiency of our system, given the Ack implies the double the travel time of messages and the repeated get requests are terribly inefficient. Even so, it does the job we wanted it to.
+
+Note that all these mechanisms occur inside the library functions and do not require any end-user intervention.
+
+
+\subsection{The Broker Crashes}
+
+In order to insure the persistence of data in the event that the broker process crashes, the usage of files is essential so we can recover and bring the broker up in the same conditions as the previous state.
+
+The solution we came up with was storing the 3 main data structures used to store the data of the broker in a file every time a change occurred. Even though this will hurt our broker's performance, we decided it was the only way to minimize the chance that a post successfully made from put would never get to a certain subscriber. 
+This was achieved by serializing the \emph{BrokerState} struct, and saving the result on a file (Save State step in Fig. \ref{fig:activity-diagram}). 
+
+The \emph{broker\_uuid} variable existed only to communicate a subscriber issuing a get request that the broker could not recover its previous state from a crash. 
+
+
+\subsection{Rare Circumstances}
+
+There are a few situations where the reliability of our service is at risk:
+
+\begin{itemize}
+    \item The broker crashes and the files with its state are wiped out - Given this situation, the previously published messages are completely lost, and all the system can do is inform the end-user through the brokerid, which is a uuid that only changes when such circumstances occur.
+    \item The broker crashes while saving the data in files - Given this situation, the service heals but some messages can be lost forever
+\end{itemize}
+
