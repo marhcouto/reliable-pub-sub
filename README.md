@@ -54,13 +54,13 @@ The client has three test scenarios. One called slow subscriber that tries to em
 ### Running the slow subscriber scenario
 
 ```
-cargo run -- scenario slow_sub
+cargo run -- slow_sub
 ```
 
 ### Running the late subscriber
 
 ```
-cargo run -- scenario late_sub
+cargo run -- late_sub
 ```
 
 ### Running the concurrency scenario
