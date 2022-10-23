@@ -67,22 +67,22 @@ cargo run -- scenario late_sub
 
 #### Running the biology publisher
 ```
-cargo run -- scenario conc_pub_bio [publisher id]
+cargo run -- conc_pub_bio [publisher id]
 ```
 
 #### Running the cars publisher
 ```
-cargo run -- scenario conc_pub_cars [publisher id]
+cargo run -- conc_pub_cars [publisher id]
 ```
 
 #### Running the biology subscriber
 ```
-cargo run -- scenario conc_sub_bio [subscriber id]
+cargo run -- conc_sub_bio [subscriber id]
 ```
 
 #### Running the cars subscriber
 ```
-cargo run -- scenario conc_sub_cars [subscriber id]
+cargo run -- conc_sub_cars [subscriber id]
 ```
 
 Group members:
