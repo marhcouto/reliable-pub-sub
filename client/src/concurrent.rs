@@ -1,4 +1,4 @@
-use meic_mq::{context::{publisher::PublisherContext, subscriber::SubscriberContext}, put, get, unsubscribe, subscribe};
+use meic_mq::{context::{publisher::PublisherContext, subscriber::SubscriberContext}, put, get, subscribe};
 use std::{thread, time};
 
 pub fn run_publisher_biology() {
