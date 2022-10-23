@@ -1,0 +1,22 @@
+\section{Introduction}
+\label{sec:Introduction}
+
+The project proposed in SDLE class consists of a reliable publish-subscribe service that should come in the form of a library which provides 4 functions:
+
+\begin{description}
+    \item[subscribe] allows the user to subscribe to a topic
+    \item[unsubscribe] allows the user to unsubscribe to the topic he was subscribed
+    \item[get] allows a subscriber to fetch a message from a topic
+    \item[put] allows the user to publish a message to a topic
+\end{description}
+
+The system developed should guarantee exactly-once delivery of its messages, except for some rare error conditions, which means, quoting the project's statement:
+
+\begin{itemize}
+    \item on successful return from put() on a topic, the service guarantees that the message will eventually be delivered "to all subscribers of that topic", as long as the subscribers keep calling get()
+    \item on successful return from get() on a topic, the service guarantees that the same message will not be returned again on a later call to get() by that subscriber
+\end{itemize}
+
+In addition the project should be built using the \emph{libzmq} library, from \emph{ZeroMQ}. We chose to use the \emph{Rust}\footnote{\url{https://www.rust-lang.org/}} programming language to build our system, as it is well known for its security, reliability, speed and developer satisfaction, as well as having a libzmq binding available.
+
+

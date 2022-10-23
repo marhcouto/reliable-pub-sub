@@ -1,0 +1,11 @@
+\section{Project Structure}
+\label{sec:Project-Structure}
+
+The project is divided into 3 main modules:
+
+\begin{description}
+    \item[lib] contains the message formats, subscriber and publisher context data and the functions to be offered to the user (get, put, subscribe and unsubscribe)
+    \item[broker] contains the code for the broker that will store and handle the published messages and deliver them to the correct subscribers
+    \item[client] contains the code for various scenarios of clients using our library 
+\end{description}
+
