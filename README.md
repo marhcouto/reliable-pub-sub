@@ -3,6 +3,8 @@
 
 SDLE First Assignment of group T06G14.
 
+Reliable PUB-SUB messaging library for RUST. Provides Broker implementation and functions to use in clients and publishers.
+
 The project is structured in three sub-projects. A library called meic_mq. A client that has some test scenarios and the broker.
 
 ## Dependencies [Rust](https://www.rust-lang.org/)
