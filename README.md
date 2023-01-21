@@ -1,4 +1,5 @@
 # SDLE First Assignment
+![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)
 
 SDLE First Assignment of group T06G14.
 
